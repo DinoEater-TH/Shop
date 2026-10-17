@@ -108,7 +108,7 @@ export default function App() {
     </header>
     {notice && <div className="notice">{notice}<button onClick={() => setNotice('')}>×</button></div>}
 
-    {screen === 'menu' && <MenuScreen menu={store.menu} addItem={addItem} user={user} store={store} onProfile={logoutOrLogin} onStore={() => setScreen('store')} onLightbox={(src, title) => setLightbox({ src, title })} />}
+    {screen === 'menu' && <MenuScreen menu={store.menu} addItem={addItem} user={user} onProfile={logoutOrLogin} onLightbox={(src, title) => setLightbox({ src, title })} />}
     {screen === 'store' && <StoreScreen store={store} user={user} onProfile={logoutOrLogin} />}
     {screen === 'cart' && <CartScreen cart={cart} updateQuantity={updateQuantity} onCheckout={() => setScreen('checkout')} onContinue={() => setScreen('menu')} />}
     {screen === 'checkout' && <CheckoutScreen cart={cart} user={user} store={store} onStoreChange={(_, nextUser) => nextUser && setUser({ ...user, ...nextUser })} onOrderCreated={created => { setCart([]); setChatOpen(false); previousStatus.current = created.Status; setOrder(created); setScreen('order') }} />}

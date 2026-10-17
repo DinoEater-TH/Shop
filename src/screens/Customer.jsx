@@ -2,9 +2,7 @@ import React, { useEffect, useState } from 'react'
 import { api, baht, compressImage, deliveryFeeFor, distanceKm, fmtTime, num, promoOf, storeDirectionsUrl } from '../api'
 import { ChatRoom, Empty, Field, MapPicker, Receipt, StatusBadge, StoreMap } from '../components'
 
-export function MenuScreen({ menu, addItem, onLightbox, onProfile, onStore, user, store }) {
-  const settings = store?.settings || {}
-  const directions = storeDirectionsUrl(settings)
+export function MenuScreen({ menu, addItem, onLightbox, onProfile, user }) {
   return <section>
     <div className="hero">
       <p>ทอดใหม่ทุกออเดอร์</p>
@@ -28,20 +26,6 @@ export function MenuScreen({ menu, addItem, onLightbox, onProfile, onStore, user
         </div>
       </article>)}
       {!menu.length && <Empty text="ร้านยังไม่เพิ่มเมนู" />}
-    </div>
-    <div className="section-title"><h2>ที่ตั้งร้าน</h2></div>
-    <div className="store-card">
-      <div className="store-card-head">
-        <span className="store-pin">📍</span>
-        <div>
-          <b>{settings.StoreName || 'DinoEater'}</b>
-          {settings.StoreAddress && <small>{settings.StoreAddress}</small>}
-        </div>
-      </div>
-      <div className="store-card-actions">
-        <button className="secondary" onClick={onStore}>ดูแผนที่ร้าน</button>
-        {directions && <button className="primary" onClick={() => window.open(directions, '_blank')}>🧭 นำทาง</button>}
-      </div>
     </div>
   </section>
 }
