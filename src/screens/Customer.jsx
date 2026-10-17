@@ -12,7 +12,7 @@ export function MenuScreen({ menu, addItem, onLightbox, onProfile, user }) {
     <div className="section-title"><h2>เมนูแนะนำ</h2><small>แตะรูปเพื่อดูเต็มจอ</small></div>
     <div className="menu-grid">
       {menu.map(item => <article className="food-card" key={item.ID}>
-        <div className="food-image" onClick={() => onLightbox(item.ImageURL, item.Name)}>
+        <div className={`food-image${item.ImageURL ? ' zoomable' : ''}`} onClick={() => item.ImageURL && onLightbox(item.ImageURL, item.Name)}>
           {item.ImageURL ? <img src={item.ImageURL} alt={item.Name} /> : '🍢'}
         </div>
         <div className="food-body">

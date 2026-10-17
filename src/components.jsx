@@ -25,7 +25,11 @@ export function Field({ label, hint, children }) {
 
 export function Lightbox({ src, title, onClose }) {
   if (!src) return null
-  return <div className="lightbox" onClick={onClose}><div className="lightbox-inner"><img src={src} alt={title || ''} /><p>{title}</p></div></div>
+  return <div className="lightbox" onClick={onClose}>
+    <button className="lightbox-close" onClick={onClose} aria-label="ปิด">×</button>
+    <img className="lightbox-image" src={src} alt={title || ''} onClick={onClose} />
+    {title && <p className="lightbox-title">{title}</p>}
+  </div>
 }
 
 export function StatusBadge({ status }) {
