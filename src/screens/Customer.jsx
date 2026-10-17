@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { api, baht, compressImage, deliveryFeeFor, distanceKm, fmtTime, num, promoOf, storeDirectionsUrl } from '../api'
-import { ChatRoom, Empty, Field, MapPicker, Receipt, StatusBadge, StoreMap } from '../components'
+import { ChatRoom, Empty, Field, MapPicker, QueueTimer, Receipt, StatusBadge, StoreMap } from '../components'
 
 export function MenuScreen({ menu, addItem, onLightbox, onProfile, user }) {
   return <section>
@@ -76,8 +76,8 @@ export function CheckoutScreen({ cart, user, store, onOrderCreated, onStoreChang
     phone: user?.Phone || '',
     orderType: 'Pickup',
     paymentMethod: 'Cash',
-    address: '',
-    point: null,
+    address: user?.Address || '',
+    point: user?.Lat && user?.Lng ? { lat: num(user.Lat), lng: num(user.Lng) } : null,
     slip: '',
     redeem: false
   })
@@ -97,6 +97,13 @@ export function CheckoutScreen({ cart, user, store, onOrderCreated, onStoreChang
       const data = await api('login', { phone })
       setMember(data.exists ? data : null)
       setChecked(true)
+      if (data.exists) {
+        setForm(current => ({
+          ...current,
+          address: current.address || data.Address || '',
+          point: current.point || (data.Lat && data.Lng ? { lat: num(data.Lat), lng: num(data.Lng) } : null)
+        }))
+      }
     } catch { setMember(null); setChecked(false) }
   }
 
@@ -306,23 +313,43 @@ function RegisterAfterOrder({ order, onRegistered }) {
 export function OrderStatusScreen({ order, store, user, onOpenChat, chatOpen, chat, onChat, onSend, onResolve, onMenu, onRegistered }) {
   if (!order) return <section className="page"><Empty text="ยังไม่มีออเดอร์ล่าสุด" action="สั่งอาหาร" onAction={onMenu} /></section>
   const settings = store.settings || {}
-  const steps = ['Pending', 'Accepted', 'Ready', 'Completed']
+  const delivery = order.OrderType === 'Delivery'
+  const steps = delivery ? ['Pending', 'Accepted', 'Ready', 'OutForDelivery', 'Completed'] : ['Pending', 'Accepted', 'Ready', 'Completed']
+  const stepLabels = delivery ? ['รับออเดอร์', 'กำลังทำ', 'พร้อมส่ง', 'กำลังจัดส่ง', 'เสร็จสิ้น'] : ['รับออเดอร์', 'กำลังทำ', 'พร้อมรับ', 'เสร็จสิ้น']
   const currentStep = steps.indexOf(order.Status)
-  const readyAt = order.CreatedAt && order.EstimatedTime ? new Date(new Date(order.CreatedAt).getTime() + num(order.EstimatedTime) * 60000) : null
+  const queue = order.queue
+  const isActive = order.Status === 'Pending' || order.Status === 'Accepted'
+  const startAt = order.StartedAt ? new Date(order.StartedAt) : null
+  const readyAt = order.EstimatedTime && (startAt || order.CreatedAt)
+    ? new Date((startAt || new Date(order.CreatedAt)).getTime() + num(order.EstimatedTime) * 60000)
+    : null
   const disputeMinutes = num(settings.DisputeMinutes)
   const canReport = order.Status === 'Completed' && order.CompletedAt && disputeMinutes > 0 && (new Date().getTime() - new Date(order.CompletedAt).getTime()) / 60000 <= disputeMinutes
+  const headline = {
+    Pending: 'รอร้านยืนยันออเดอร์',
+    Accepted: 'ร้านกำลังทำอาหาร',
+    Ready: delivery ? 'อาหารพร้อม กำลังเตรียมจัดส่ง' : 'อาหารพร้อมรับที่ร้าน',
+    OutForDelivery: 'กำลังดำเนินการจัดส่ง',
+    Completed: 'ออเดอร์เสร็จสิ้น',
+    Cancelled: 'ออเดอร์ถูกยกเลิก'
+  }[order.Status] || 'ออเดอร์ของคุณ'
+  const icon = order.Status === 'Completed' ? '✅' : order.Status === 'Cancelled' ? '🚫' : order.Status === 'OutForDelivery' ? '🛵' : order.Status === 'Ready' ? '📦' : '🍳'
 
   return <section className="page status">
-    <div className="status-icon">{order.Status === 'Completed' ? '✅' : '🍳'}</div>
-    <h1>{order.Status === 'Completed' ? 'ออเดอร์เสร็จสิ้น' : 'ร้านได้รับออเดอร์แล้ว'}</h1>
+    <div className="status-icon">{icon}</div>
+    <h1>{headline}</h1>
     <p>หมายเลข <b>{order.OrderID}</b></p>
     <StatusBadge status={order.Status} />
+    {queue && isActive && <div className="queue-card">
+      <b>คิวที่ {queue.position}</b> จากทั้งหมด {queue.totalInQueue} คิว
+      <div className="queue-wait">รออีกประมาณ <QueueTimer minutes={queue.waitingMinutes} /> นาที{num(queue.ahead) > 0 ? ` · มี ${queue.ahead} ออเดอร์ก่อนหน้า` : ' · เป็นคิวแรก'}</div>
+    </div>}
     <div className="timeline">
       {steps.map((step, index) => <div key={step} className={`timeline-step ${index <= currentStep ? 'done' : ''}`}>
-        <span className="dot" /><small>{['รับออเดอร์', 'กำลังทำ', 'พร้อมรับ/ส่ง', 'เสร็จสิ้น'][index]}</small>
+        <span className="dot" /><small>{stepLabels[index]}</small>
       </div>)}
     </div>
-    <p className="hint">เวลาทำอาหารประมาณ {num(order.EstimatedTime)} นาที{readyAt ? ` · พร้อมประมาณ ${readyAt.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })}` : ''}</p>
+    {order.Status !== 'Completed' && order.Status !== 'Cancelled' && <p className="hint">เวลาทำอาหารประมาณ {num(order.EstimatedTime)} นาที{readyAt ? ` · พร้อมประมาณ ${readyAt.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })}` : ''}</p>}
     {order.Status === 'Completed' && <p>{settings.ThankYouMessage}</p>}
     <div className="receipt">
       {(order.items || []).map(item => <div key={item.ID}><span>{item.MenuID} × {item.Quantity}</span><b>{baht(num(item.Price) * num(item.Quantity))}</b></div>)}

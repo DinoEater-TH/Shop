@@ -5,9 +5,9 @@ const SESSION_SECONDS = 21600;
 
 const TABLES = {
   Settings: ['Key', 'Value'],
-  Users: ['ID', 'Phone', 'PIN', 'Name', 'ProfilePic', 'Role', 'Stamps', 'CreatedAt'],
+  Users: ['ID', 'Phone', 'PIN', 'Name', 'ProfilePic', 'Role', 'Stamps', 'CreatedAt', 'Address', 'Lat', 'Lng'],
   Menu: ['ID', 'Name', 'Description', 'Price', 'ImageURL', 'Stock', 'IsActive'],
-  Orders: ['OrderID', 'UserID', 'Phone', 'OrderType', 'AddressDetail', 'Lat', 'Lng', 'Distance', 'DeliveryFee', 'PaymentMethod', 'SubTotal', 'Discount', 'Total', 'Status', 'SlipURL', 'EstimatedTime', 'CreatedAt', 'CompletedAt', 'StampEarned'],
+  Orders: ['OrderID', 'UserID', 'Phone', 'OrderType', 'AddressDetail', 'Lat', 'Lng', 'Distance', 'DeliveryFee', 'PaymentMethod', 'SubTotal', 'Discount', 'Total', 'Status', 'SlipURL', 'EstimatedTime', 'CreatedAt', 'CompletedAt', 'StampEarned', 'StartedAt', 'QueuePosition'],
   OrderItems: ['ID', 'OrderID', 'MenuID', 'Quantity', 'Price'],
   Promotions: ['PromoType', 'Condition', 'DiscountValue', 'FreeMenuID', 'IsActive'],
   ChatDisputes: ['ChatID', 'OrderID', 'SenderRole', 'Message', 'Timestamp', 'Status'],
@@ -85,8 +85,15 @@ function setupDatabase() {
     if (sheet.getLastRow() === 0) {
       sheet.appendRow(TABLES[name]);
     } else {
-      const headers = sheet.getRange(1, 1, 1, Math.max(1, sheet.getLastColumn())).getValues()[0].map(function (value) { return String(value); });
-      TABLES[name].forEach(function (key) { if (headers.indexOf(key) < 0) { headers.push(key); sheet.getRange(1, headers.length).setValue(key); } });
+      const width = Math.max(1, sheet.getLastColumn());
+      const headers = sheet.getRange(1, 1, 1, width).getValues()[0].map(function (value) { return String(value); });
+      TABLES[name].forEach(function (key) {
+        if (headers.indexOf(key) >= 0) return;
+        let slot = headers.indexOf('');
+        if (slot < 0) { headers.push(''); slot = headers.length - 1; }
+        headers[slot] = key;
+        sheet.getRange(1, slot + 1).setValue(key);
+      });
     }
     sheet.setFrozenRows(1);
   });
@@ -197,7 +204,7 @@ function login_(request) {
   if (!/^0\d{8,9}$/.test(phone)) throw new Error('เบอร์โทรศัพท์ไม่ถูกต้อง');
   let existing = userByPhone_(phone);
   if (!existing && request.register) {
-    existing = { ID: 'U' + Date.now(), Phone: phone, PIN: '', Name: request.name || 'ลูกค้าทั่วไป', ProfilePic: '', Role: 'Customer', Stamps: 0, CreatedAt: new Date() };
+    existing = { ID: 'U' + Date.now(), Phone: phone, PIN: '', Name: request.name || 'ลูกค้าทั่วไป', ProfilePic: '', Role: 'Customer', Stamps: 0, CreatedAt: new Date(), Address: request.address || '', Lat: request.lat || '', Lng: request.lng || '' };
     append_('Users', existing);
   }
   if (!existing) return { exists: false, Phone: phone };
@@ -211,6 +218,9 @@ function updateProfile_(request) {
   if (!user) throw new Error('ไม่พบผู้ใช้');
   const changes = {};
   if (request.name) changes.Name = request.name;
+  if (request.address !== undefined) changes.Address = request.address;
+  if (request.lat !== undefined) changes.Lat = request.lat;
+  if (request.lng !== undefined) changes.Lng = request.lng;
   if (request.profilePicBase64) changes.ProfilePic = uploadBase64_(request.profilePicBase64, 'profile-' + user.ID + '.jpg');
   if (!Object.keys(changes).length) throw new Error('ไม่มีข้อมูลที่จะแก้ไข');
   updateRow_('Users', 'ID', user.ID, changes);
@@ -228,11 +238,46 @@ function getMenu_(request) { if (request.sessionToken) requireAdmin_(request.ses
 function getPromotions_() { return rows_('Promotions'); }
 
 /* ---------- orders ---------- */
+const ACTIVE_STATUSES = ['Pending', 'Accepted'];
 function ordersByUser_(userId) { return rows_('Orders').filter(function (row) { return String(row.UserID) === String(userId); }); }
-function getOrder_(request) { const order = find_('Orders', 'OrderID', request.orderId); return Object.assign({}, order, { items: rows_('OrderItems').filter(function (row) { return String(row.OrderID) === String(order.OrderID); }) }); }
+function activeOrders_() {
+  return rows_('Orders')
+    .filter(function (row) { return ACTIVE_STATUSES.indexOf(String(row.Status)) >= 0; })
+    .sort(function (a, b) { return new Date(a.CreatedAt).getTime() - new Date(b.CreatedAt).getTime(); });
+}
+function orderMinutes_(order, settings) { return number_(order.EstimatedTime) || number_(settings.PrepMinutes) || 10; }
+function queueInfo_(order) {
+  if (ACTIVE_STATUSES.indexOf(String(order.Status)) < 0) return null;
+  const settings = settings_();
+  const active = activeOrders_();
+  const index = active.map(function (row) { return String(row.OrderID); }).indexOf(String(order.OrderID));
+  if (index < 0) return null;
+  const now = new Date().getTime();
+  let wait = 0;
+  for (let i = 0; i <= index; i++) {
+    const row = active[i];
+    let contribution = orderMinutes_(row, settings);
+    if (i === 0 && String(row.Status) === 'Accepted' && row.StartedAt) {
+      const elapsed = (now - new Date(row.StartedAt).getTime()) / 60000;
+      contribution = Math.max(0, contribution - elapsed);
+    }
+    wait += contribution;
+  }
+  return { position: index + 1, ahead: index, waitingMinutes: Math.round(wait), totalInQueue: active.length };
+}
+function ensureCooking_() {
+  const active = activeOrders_();
+  const cooking = active.filter(function (row) { return String(row.Status) === 'Accepted'; })[0];
+  if (cooking && !cooking.StartedAt) updateRow_('Orders', 'OrderID', cooking.OrderID, { StartedAt: new Date() });
+}
+function getOrder_(request) {
+  const order = find_('Orders', 'OrderID', request.orderId);
+  return Object.assign({}, order, { items: rows_('OrderItems').filter(function (row) { return String(row.OrderID) === String(order.OrderID); }), queue: queueInfo_(order) });
+}
 function getOrders_(request) {
   requireAdmin_(request.sessionToken);
-  return rows_('Orders').sort(function (a, b) { return String(b.CreatedAt).localeCompare(String(a.CreatedAt)); }).slice(0, 100);
+  return rows_('Orders').sort(function (a, b) { return String(b.CreatedAt).localeCompare(String(a.CreatedAt)); }).slice(0, 100)
+    .map(function (order) { return Object.assign({}, order, { queue: queueInfo_(order) }); });
 }
 function getCustomerOrders_(request) {
   const phone = phone_(request.phone);
@@ -257,11 +302,12 @@ function createOrder_(request) {
     if (!userId && phone) { const match = userByPhone_(phone); if (match) userId = match.ID; }
     const redeem = o.redeemStamps && userId ? prepareStampRedemption_(userId, id) : null;
     const slip = o.slipBase64 ? uploadBase64_(o.slipBase64, 'slip-' + id + '.jpg') : '';
+    const queuePosition = activeOrders_().length + 1;
     const order = {
       OrderID: id, UserID: userId, Phone: phone, OrderType: o.orderType, AddressDetail: o.addressDetail || '',
       Lat: o.lat || '', Lng: o.lng || '', Distance: number_(o.distance), DeliveryFee: number_(o.deliveryFee),
       PaymentMethod: o.paymentMethod, SubTotal: number_(o.subTotal), Discount: number_(o.discount), Total: number_(o.total),
-      Status: 'Pending', SlipURL: slip, EstimatedTime: number_(o.estimatedTime) || number_(settings.PrepMinutes), CreatedAt: new Date(), CompletedAt: '', StampEarned: ''
+      Status: 'Pending', SlipURL: slip, EstimatedTime: number_(o.estimatedTime) || number_(settings.PrepMinutes), CreatedAt: new Date(), CompletedAt: '', StampEarned: '', StartedAt: '', QueuePosition: queuePosition
     };
     append_('Orders', order);
     request.items.forEach(function (item) { append_('OrderItems', { ID: 'OI' + Utilities.getUuid(), OrderID: id, MenuID: item.menuId, Quantity: number_(item.quantity), Price: number_(item.price) }); });
@@ -284,10 +330,11 @@ function prepareStampRedemption_(userId, orderId) {
 function updateStatus_(request) {
   const admin = requireAdmin_(request.sessionToken);
   const order = find_('Orders', 'OrderID', request.orderId);
-  const allowed = ['Pending', 'Accepted', 'Ready', 'Completed', 'Cancelled'];
+  const allowed = ['Pending', 'Accepted', 'Ready', 'OutForDelivery', 'Completed', 'Cancelled'];
   if (allowed.indexOf(request.status) < 0) throw new Error('สถานะไม่ถูกต้อง');
   const changes = { Status: request.status };
   if (request.estimatedTime) changes.EstimatedTime = number_(request.estimatedTime);
+  if (request.status === 'Accepted') changes.EstimatedTime = number_(request.estimatedTime) || orderMinutes_(order, settings_());
   if (request.status === 'Completed') {
     changes.CompletedAt = new Date();
     let userId = order.UserID;
@@ -301,6 +348,7 @@ function updateStatus_(request) {
     }
   }
   updateRow_('Orders', 'OrderID', order.OrderID, changes);
+  if (['Accepted', 'Ready', 'OutForDelivery', 'Completed', 'Cancelled'].indexOf(request.status) >= 0) ensureCooking_();
   log_(admin.ID, 'ORDER_STATUS', order.OrderID + ' -> ' + request.status);
   return getOrder_(request);
 }

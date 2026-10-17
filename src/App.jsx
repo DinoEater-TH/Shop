@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { api, beep, isAdmin } from './api'
-import { Lightbox } from './components'
+import { Lightbox, WelcomeModal } from './components'
 import { CartScreen, CheckoutScreen, MenuScreen, OrderStatusScreen, ProfileScreen, StoreScreen } from './screens/Customer'
 import AdminScreen from './screens/Admin'
 
@@ -16,6 +16,7 @@ export default function App() {
   const [lightbox, setLightbox] = useState(null)
   const [chatOpen, setChatOpen] = useState(false)
   const [chat, setChat] = useState(null)
+  const [welcome, setWelcome] = useState(() => !localStorage.getItem('dino-welcome') && !localStorage.getItem('dino-user'))
   const previousStatus = useRef(null)
 
   async function loadStore() {
@@ -36,11 +37,19 @@ export default function App() {
         const fresh = await api('getOrder', { orderId: order.OrderID })
         setOrder(fresh)
         if (previousStatus.current && previousStatus.current !== fresh.Status) {
-          setNotice(`ออเดอร์ ${fresh.OrderID} อัปเดตเป็น: ${fresh.Status}`)
+          const delivery = fresh.OrderType === 'Delivery'
+          const messages = {
+            Accepted: `ร้านรับออเดอร์แล้ว กำลังทำประมาณ ${fresh.EstimatedTime || 10} นาที`,
+            Ready: delivery ? 'อาหารพร้อมแล้ว กำลังเตรียมจัดส่ง' : 'อาหารพร้อมแล้ว รับได้ที่ร้าน',
+            OutForDelivery: 'กำลังดำเนินการจัดส่ง',
+            Completed: 'ออเดอร์เสร็จสิ้น ขอบคุณที่ใช้บริการ',
+            Cancelled: 'ออเดอร์ถูกยกเลิก'
+          }
+          setNotice(messages[fresh.Status] || `ออเดอร์ ${fresh.OrderID}: ${fresh.Status}`)
           beep(2)
         }
         previousStatus.current = fresh.Status
-      } catch { /* keep silent on polling errors */ }
+      } catch { /* ignore */ }
     }, 12000)
     return () => clearInterval(timer)
   }, [order?.OrderID])
@@ -98,6 +107,18 @@ export default function App() {
 
   function logoutOrLogin() { setScreen('profile') }
 
+  function handleWelcomeMember(member) {
+    localStorage.setItem('dino-welcome', 'done')
+    setUser(member)
+    setWelcome(false)
+    if (order?.OrderID) api('getOrder', { orderId: order.OrderID }).then(setOrder).catch(() => {})
+    setNotice(`ยินดีต้อนรับ ${member.Name || member.Phone}`)
+  }
+  function handleWelcomeGuest() {
+    localStorage.setItem('dino-welcome', 'done')
+    setWelcome(false)
+  }
+
   return <div className="app-shell">
     <header>
       <button className="brand" onClick={() => setScreen('menu')}>DINO<span>EATER</span></button>
@@ -115,6 +136,7 @@ export default function App() {
     {screen === 'profile' && <ProfileScreen user={user} onUser={setUser} onBack={() => setScreen('menu')} store={store} onReorder={reorder} />}
     {screen === 'order' && <OrderStatusScreen order={order} store={store} user={user} chatOpen={chatOpen} chat={chat} onOpenChat={openChat} onSend={sendChat} onMenu={() => { setChatOpen(false); setScreen('menu') }} onRegistered={handleRegistered} />}
     {screen === 'admin' && <AdminScreen store={store} reloadStore={loadStore} user={user} requireLogin={() => setScreen('profile')} />}
+    {welcome && !user && <WelcomeModal onMember={handleWelcomeMember} onGuest={handleWelcomeGuest} />}
 
     <nav>
       <button onClick={() => setScreen('menu')}>เมนู</button>

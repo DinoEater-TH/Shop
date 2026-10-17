@@ -136,6 +136,22 @@ input[type=checkbox]{width:auto}
 .lightbox-inner img{max-width:92vw;max-height:76vh;border-radius:16px}
 .lightbox-inner p{color:#fff;text-align:center;font-size:16px}
 .hint.error{color:#c0392b}
+.badge-outfordelivery{background:#d6e8ff;color:#1c4f8a}
+.queue-line{display:block;color:#b8451f;font-weight:600}
+.queue-card{margin:12px 0;padding:14px 16px;border-radius:14px;background:#fff6ee;border:1px solid #f2ddc9;text-align:center}
+.queue-card b{font-size:20px;color:#b8451f}
+.queue-wait{margin-top:6px;color:#6b574c}
+.queue-timer{font-size:22px;color:#b8451f;font-variant-numeric:tabular-nums}
+.sound-picker{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0 14px}
+.sound-picker .ghost{background:#f4ece5;border:0;border-radius:10px;padding:8px 12px;cursor:pointer;font-family:inherit;color:#5a4a41}
+.minutes-stepper{display:flex;align-items:center;gap:10px;margin:14px 0}
+.minutes-stepper input{width:80px;text-align:center;font-size:18px;padding:8px;border:1px solid #e6d9cc;border-radius:10px}
+.minutes-stepper button{border:0;border-radius:10px;background:#f0e6dc;padding:10px 14px;font-family:inherit;font-size:15px;cursor:pointer}
+.minutes-stepper span{color:#806f66}
+.modal-card h2{margin-top:0}
+.welcome .modal-card{max-width:420px}
+.welcome .primary,.welcome .ghost{width:100%;margin-top:8px}
+@media(min-width:681px){body{background:#eee3d8}.app-shell{box-shadow:0 0 40px #59351d1a}}
 nav{position:fixed;bottom:0;left:0;right:0;max-width:680px;margin:auto;height:66px;display:flex;justify-content:space-around;align-items:center;background:#fff;border-top:1px solid #eee5dd;z-index:5}
 nav button{border:0;background:none;font-family:inherit;color:#62534b;font-size:12px;cursor:pointer}
 @media(min-width:681px){body{background:#eee3d8}.app-shell{box-shadow:0 0 40px #59351d1a}}

@@ -26,7 +26,7 @@ export default function AdminScreen({ store, reloadStore, user, requireLogin }) 
   return <section className="page admin">
     <h1>หน้าร้าน</h1>
     <div className="tabs">{TABS.map(item => <button key={item.key} className={tab === item.key ? 'active' : ''} onClick={() => setTab(item.key)}>{item.label}</button>)}</div>
-    {tab === 'orders' && <AdminOrders token={token} />}
+    {tab === 'orders' && <AdminOrders token={token} store={store} />}
     {tab === 'menu' && <AdminMenu token={token} reloadStore={reloadStore} />}
     {tab === 'promos' && <AdminPromos store={store} token={token} reloadStore={reloadStore} />}
     {tab === 'users' && <AdminUsers token={token} role={user.Role} />}
@@ -50,21 +50,29 @@ function usePolling(loader, active, interval = 10000) {
   return { data, error, setData }
 }
 
-function AdminOrders({ token }) {
-  const { data: orders, error } = usePolling(() => api('getOrders', { sessionToken: token }), !!token, 10000)
+function AdminOrders({ token, store }) {
+  const { data: orders, error, setData: setOrders } = usePolling(() => api('getOrders', { sessionToken: token }), !!token, 8000)
   const seen = useRef(null)
   const [detail, setDetail] = useState(null)
   const [chatOrder, setChatOrder] = useState(null)
   const [chat, setChat] = useState(null)
   const [soundOn, setSoundOn] = useState(true)
+  const [sound, setSound] = useState(() => localStorage.getItem('dino-alert-sound') || '')
+  const [acceptOrder, setAcceptOrder] = useState(null)
+  const [acceptMinutes, setAcceptMinutes] = useState(10)
+
+  function playAlert(times) {
+    if (!sound) return beep(times)
+    try { const audio = new Audio(sound); audio.play().catch(() => beep(times)) } catch { beep(times) }
+  }
 
   useEffect(() => {
     const pending = orders.filter(order => order.Status === 'Pending').map(order => order.OrderID)
     if (seen.current === null) { seen.current = new Set(pending); return }
     const fresh = pending.filter(id => !seen.current.has(id))
     fresh.forEach(id => seen.current.add(id))
-    if (fresh.length && soundOn) beep(fresh.length > 1 ? 5 : 3)
-  }, [orders, soundOn])
+    if (fresh.length && soundOn) playAlert(fresh.length > 1 ? 5 : 3)
+  }, [orders, soundOn, sound])
 
   useEffect(() => {
     if (!chatOrder) return
@@ -76,10 +84,22 @@ function AdminOrders({ token }) {
   }, [chatOrder, token])
 
   async function advance(order, status, estimatedTime) {
-    try { const updated = await api('updateOrderStatus', { sessionToken: token, orderId: order.OrderID, status, estimatedTime }); setDetail(updated) } catch (updateError) { alert(updateError.message) }
+    try {
+      const updated = await api('updateOrderStatus', { sessionToken: token, orderId: order.OrderID, status, estimatedTime })
+      setOrders(current => current.map(row => row.OrderID === updated.OrderID ? updated : row))
+      setDetail(current => (current && current.OrderID === updated.OrderID ? updated : current))
+    } catch (updateError) { alert(updateError.message) }
   }
   async function openDetail(order) {
     try { setDetail(await api('getOrder', { orderId: order.OrderID })) } catch (detailError) { alert(detailError.message) }
+  }
+  function openAccept(order) { setAcceptMinutes(num(store?.settings?.PrepMinutes) || num(order.EstimatedTime) || 10); setAcceptOrder(order) }
+  async function confirmAccept() { const target = acceptOrder; setAcceptOrder(null); await advance(target, 'Accepted', acceptMinutes) }
+  function pickSound(file) {
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = () => { localStorage.setItem('dino-alert-sound', reader.result); setSound(reader.result); try { new Audio(reader.result).play() } catch { /* ignore */ } }
+    reader.readAsDataURL(file)
   }
   async function send(message) {
     try { setChat(await api('sendChat', { orderId: chatOrder.OrderID, sessionToken: token, message })) } catch (sendError) { alert(sendError.message) }
@@ -92,23 +112,46 @@ function AdminOrders({ token }) {
 
   return <div>
     <div className="row-between"><h2>ออเดอร์ล่าสุด</h2><label className="checkline"><input type="checkbox" checked={soundOn} onChange={event => setSoundOn(event.target.checked)} /><span>เสียงเตือน</span></label></div>
+    <div className="sound-picker">
+      <label className="ghost compact">🔔 เลือกไฟล์เสียงจากเครื่อง<input type="file" accept="audio/*" hidden onChange={event => pickSound(event.target.files[0])} /></label>
+      {sound && <button className="ghost compact" onClick={() => { localStorage.removeItem('dino-alert-sound'); setSound('') }}>ใช้เสียงเริ่มต้น</button>}
+      <button className="ghost compact" onClick={() => playAlert(3)}>ทดลองเสียง</button>
+    </div>
     {error && <p className="hint error">{error}</p>}
     {orders.map(order => <article className="order-card" key={order.OrderID}>
       <b>{order.OrderID}</b>
       <span>{order.OrderType === 'Delivery' ? 'จัดส่ง' : 'รับเอง'} · {order.PaymentMethod === 'Transfer' ? 'โอน' : 'เงินสด'} · {baht(order.Total)}</span>
       <small>{order.Phone} · {fmtTime(order.CreatedAt)}</small>
+      {order.queue && (order.Status === 'Pending' || order.Status === 'Accepted') && <small className="queue-line">คิวที่ {order.queue.position} · รออีกประมาณ {order.queue.waitingMinutes} นาที</small>}
       <div className="row-actions">
         <StatusBadge status={order.Status} />
         <button onClick={() => openDetail(order)}>รายละเอียด</button>
-        {order.Status === 'Pending' && <button onClick={() => advance(order, 'Accepted')}>รับออเดอร์</button>}
-        {order.Status === 'Accepted' && <button onClick={() => advance(order, 'Ready')}>อาหารพร้อม</button>}
-        {order.Status === 'Ready' && <button onClick={() => advance(order, 'Completed')}>เสร็จสิ้น</button>}
+        {order.Status === 'Pending' && <button className="primary" onClick={() => openAccept(order)}>รับออเดอร์</button>}
+        {order.Status === 'Accepted' && <button onClick={() => advance(order, 'Ready', num(order.EstimatedTime))}>อาหารพร้อม</button>}
+        {order.Status === 'Ready' && (order.OrderType === 'Delivery'
+          ? <button className="primary" onClick={() => advance(order, 'OutForDelivery', num(order.EstimatedTime))}>เริ่มจัดส่ง</button>
+          : <button className="primary" onClick={() => advance(order, 'Completed', num(order.EstimatedTime))}>เสร็จสิ้น</button>)}
+        {order.Status === 'OutForDelivery' && <button className="primary" onClick={() => advance(order, 'Completed', num(order.EstimatedTime))}>ส่งเสร็จแล้ว</button>}
       </div>
     </article>)}
     {!orders.length && !error && <p className="hint">ยังไม่มีออเดอร์</p>}
+    {acceptOrder && <div className="modal">
+      <div className="modal-card">
+        <h2>รับออเดอร์</h2>
+        <p className="hint">หมายเลข {acceptOrder.OrderID} · กำหนดเวลาแล้วลูกค้าจะเห็นนับถอยหลัง</p>
+        <div className="minutes-stepper">
+          <button onClick={() => setAcceptMinutes(value => Math.max(1, num(value) - 5))}>−5</button>
+          <input type="number" min="1" value={acceptMinutes} onChange={event => setAcceptMinutes(event.target.value)} />
+          <button onClick={() => setAcceptMinutes(value => num(value) + 5)}>+5</button>
+          <span>นาที</span>
+        </div>
+        <button className="primary" onClick={confirmAccept}>ยืนยันรับออเดอร์ · {num(acceptMinutes)} นาที</button>
+        <button className="ghost" onClick={() => setAcceptOrder(null)}>ยกเลิก</button>
+      </div>
+    </div>}
     {chatOrder && <div className="modal">
       <div className="modal-card">
-        <div className="row-between"><b>แชทออเดอร์ {chatOrder.OrderID}</b><button className="ghost" onClick={() => { setChatOrder(null); setChat(null) }}>ปิด</button></div>
+        <div className="row-between"><h2>แชทออเดอร์ {chatOrder.OrderID}</h2><button className="ghost compact" onClick={() => { setChatOrder(null); setChat(null) }}>ปิด</button></div>
         <ChatRoom chat={chat} send={send} onResolve={resolve} canResolve />
       </div>
     </div>}
@@ -121,6 +164,7 @@ function AdminOrderDetail({ order, onClose, onAdvance, onChat }) {
     <button className="ghost" onClick={onClose}>← กลับ</button>
     <h2>ออเดอร์ {order.OrderID}</h2>
     <StatusBadge status={order.Status} />
+    {order.queue && (order.Status === 'Pending' || order.Status === 'Accepted') && <p className="hint">คิวที่ {order.queue.position} จาก {order.queue.totalInQueue} · รออีกประมาณ {order.queue.waitingMinutes} นาที</p>}
     <div className="receipt">
       <div><span>ลูกค้า</span><b>{order.Phone}</b></div>
       <div><span>รูปแบบ</span><b>{order.OrderType === 'Delivery' ? 'จัดส่ง' : 'รับเอง'}</b></div>
@@ -136,8 +180,14 @@ function AdminOrderDetail({ order, onClose, onAdvance, onChat }) {
     <Field label="เวลาทำอาหาร (นาที)"><input type="number" min="1" value={minutes} onChange={event => setMinutes(event.target.value)} /></Field>
     <div className="row-actions">
       {order.Status === 'Pending' && <button className="primary" onClick={() => onAdvance(order, 'Accepted', minutes)}>รับออเดอร์</button>}
-      {order.Status === 'Accepted' && <button className="primary" onClick={() => onAdvance(order, 'Ready', minutes)}>อาหารพร้อม</button>}
-      {order.Status === 'Ready' && <button className="primary" onClick={() => onAdvance(order, 'Completed', minutes)}>เสร็จสิ้น</button>}
+      {order.Status === 'Accepted' && <>
+        <button className="primary" onClick={() => onAdvance(order, 'Ready', minutes)}>อาหารพร้อม</button>
+        <button className="secondary" onClick={() => onAdvance(order, 'Accepted', minutes)}>อัปเดตเวลา</button>
+      </>}
+      {order.Status === 'Ready' && (order.OrderType === 'Delivery'
+        ? <button className="primary" onClick={() => onAdvance(order, 'OutForDelivery', minutes)}>เริ่มจัดส่ง</button>
+        : <button className="primary" onClick={() => onAdvance(order, 'Completed', minutes)}>เสร็จสิ้น</button>)}
+      {order.Status === 'OutForDelivery' && <button className="primary" onClick={() => onAdvance(order, 'Completed', minutes)}>ส่งเสร็จแล้ว</button>}
       <button className="secondary" onClick={() => onChat(order)}>แชทลูกค้า</button>
     </div>
   </div>

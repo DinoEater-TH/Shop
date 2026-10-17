@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
-import { baht, currentPosition, distanceKm, num, storeCoords, storeDirectionsUrl } from './api'
+import { api, baht, currentPosition, distanceKm, num, storeCoords, storeDirectionsUrl } from './api'
 
 const OSM_URL = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'
 const OSM_ATTR = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
@@ -29,8 +29,85 @@ export function Lightbox({ src, title, onClose }) {
 }
 
 export function StatusBadge({ status }) {
-  const labels = { Pending: 'รอรับออเดอร์', Accepted: 'กำลังทำ', Ready: 'พร้อมรับ/พร้อมส่ง', Completed: 'เสร็จสิ้น', Cancelled: 'ยกเลิก' }
+  const labels = { Pending: 'รอรับออเดอร์', Accepted: 'กำลังทำ', Ready: 'พร้อมรับ/ส่ง', OutForDelivery: 'กำลังจัดส่ง', Completed: 'เสร็จสิ้น', Cancelled: 'ยกเลิก' }
   return <span className={`badge badge-${String(status).toLowerCase()}`}>{labels[status] || status}</span>
+}
+
+export function QueueTimer({ minutes }) {
+  const [left, setLeft] = useState(Math.max(0, Math.round(num(minutes) * 60)))
+  useEffect(() => { setLeft(Math.max(0, Math.round(num(minutes) * 60))) }, [minutes])
+  useEffect(() => {
+    const timer = setInterval(() => setLeft(value => (value > 0 ? value - 1 : 0)), 1000)
+    return () => clearInterval(timer)
+  }, [])
+  const mm = Math.floor(left / 60), ss = left % 60
+  return <b className="queue-timer">{mm}:{String(ss).padStart(2, '0')}</b>
+}
+
+export function WelcomeModal({ onMember, onGuest }) {
+  const [step, setStep] = useState('phone')
+  const [phone, setPhone] = useState('')
+  const [name, setName] = useState('')
+  const [address, setAddress] = useState('')
+  const [point, setPoint] = useState(null)
+  const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
+  const digits = String(phone).replace(/\D/g, '')
+
+  async function check() {
+    setError('')
+    if (!/^0\d{8,9}$/.test(digits)) return setError('กรุณากรอกเบอร์โทรศัพท์ให้ถูกต้อง')
+    setBusy(true)
+    try {
+      const data = await api('login', { phone: digits })
+      if (data.exists) onMember(data); else setStep('ask')
+    } catch (checkError) { setError(checkError.message) } finally { setBusy(false) }
+  }
+  async function register() {
+    setError('')
+    if (!/^0\d{8,9}$/.test(digits)) return setError('กรุณากรอกเบอร์โทรศัพท์ให้ถูกต้อง')
+    setBusy(true)
+    try {
+      const data = await api('login', { phone: digits, register: true, name, address, lat: point?.lat || '', lng: point?.lng || '' })
+      onMember(data)
+    } catch (registerError) { setError(registerError.message) } finally { setBusy(false) }
+  }
+  async function pin() {
+    setError('')
+    try { setPoint(await currentPosition()) } catch (pinError) { setError(pinError.message) }
+  }
+
+  return <div className="modal welcome">
+    <div className="modal-card">
+      {step === 'phone' && <>
+        <h2>ยินดีต้อนรับสู่ DinoEater</h2>
+        <p className="hint">กรอกเบอร์โทรเพื่อเข้าใช้งานหรือสะสมแสตมป์ (หรือกดข้ามได้)</p>
+        <Field label="เบอร์โทรศัพท์"><input value={phone} inputMode="tel" onChange={event => setPhone(event.target.value)} placeholder="08x-xxx-xxxx" /></Field>
+        {error && <p className="hint error">{error}</p>}
+        <button className="primary" disabled={busy} onClick={check}>{busy ? 'กำลังตรวจสอบ...' : 'ตรวจสอบเบอร์'}</button>
+        <button className="ghost" onClick={onGuest}>ข้าม · เป็นลูกค้าทั่วไป</button>
+      </>}
+      {step === 'ask' && <>
+        <h2>ยังไม่เป็นสมาชิก</h2>
+        <p className="hint">เบอร์ {digits} ยังไม่มีบัญชี ต้องการสมัครสมาชิกหรือไม่?</p>
+        <button className="primary" onClick={() => setStep('register')}>ตกลง · สมัครสมาชิก</button>
+        <button className="ghost" onClick={onGuest}>ไม่ · เป็นลูกค้าทั่วไป</button>
+      </>}
+      {step === 'register' && <>
+        <h2>สมัครสมาชิก</h2>
+        <Field label="เบอร์โทรศัพท์ (จำเป็น)"><input value={phone} inputMode="tel" onChange={event => setPhone(event.target.value)} placeholder="08x-xxx-xxxx" /></Field>
+        <Field label="ชื่อ (ใส่ทีหลังได้)"><input value={name} onChange={event => setName(event.target.value)} placeholder="ชื่อจริงหรือชื่อเล่น" /></Field>
+        <Field label="ที่อยู่ (ใส่ทีหลังได้)"><input value={address} onChange={event => setAddress(event.target.value)} placeholder="บ้านเลขที่ / จุดสังเกต" /></Field>
+        <div className="map-actions">
+          <button type="button" onClick={pin}>📍 หมุดของฉัน (บันทึกพิกัดบ้าน)</button>
+        </div>
+        {point && <p className="hint">บันทึกพิกัดแล้ว: {num(point.lat).toFixed(4)}, {num(point.lng).toFixed(4)}</p>}
+        {error && <p className="hint error">{error}</p>}
+        <button className="primary" disabled={busy} onClick={register}>{busy ? 'กำลังสมัคร...' : 'สมัครสมาชิก'}</button>
+        <button className="ghost" onClick={onGuest}>ข้าม · เป็นลูกค้าทั่วไป</button>
+      </>}
+    </div>
+  </div>
 }
 
 export function Receipt({ subtotal, deliveryFee, discount, total, lines = [] }) {
