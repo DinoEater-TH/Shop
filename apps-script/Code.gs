@@ -120,9 +120,8 @@ function seedDemo_() {
     { ID: 'M004', Name: 'น้ำอัดลม', Description: 'เย็นฉ่ำ แก้ว 16 ออนซ์', Price: 20, ImageURL: '', Stock: 'Unlimited', IsActive: 'TRUE' }
   ];
   if (rows_('Menu').length === 0) demoMenu.forEach(function (item) { append_('Menu', item); });
-  const adminPhone = '0800000000';
-  const hasAdmin = rows_('Users').some(function (row) { return phone_(row.Phone) === adminPhone; });
-  if (!hasAdmin) append_('Users', { ID: 'U' + Date.now(), Phone: adminPhone, PIN: '', Name: 'เจ้าของร้าน', ProfilePic: '', Role: 'SuperAdmin', Stamps: 0, CreatedAt: new Date() });
+  const hasAdmin = rows_('Users').some(function (row) { return String(row.Role) === 'Admin' || String(row.Role) === 'SuperAdmin'; });
+  if (!hasAdmin) append_('Users', { ID: 'U' + Date.now(), Phone: '0800000000', PIN: '', Name: 'เจ้าของร้าน', ProfilePic: '', Role: 'SuperAdmin', Stamps: 0, CreatedAt: new Date() });
   if (rows_('Promotions').length === 0) DEFAULT_PROMOTIONS.forEach(function (promo) { append_('Promotions', promo); });
   return 'Demo data ready';
 }
