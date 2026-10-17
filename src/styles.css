@@ -149,6 +149,11 @@ input[type=checkbox]{width:auto}
 .minutes-stepper button{border:0;border-radius:10px;background:#f0e6dc;padding:10px 14px;font-family:inherit;font-size:15px;cursor:pointer}
 .minutes-stepper span{color:#806f66}
 .modal-card h2{margin-top:0}
+.member-link{display:block;width:100%;text-align:left;border:0;background:#fff6ee;border-radius:10px;padding:10px 12px;font-family:inherit;font-size:15px;font-weight:700;color:#7a3f1f;cursor:pointer}
+.stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(90px,1fr));gap:10px;margin:12px 0}
+.stat-grid>div{background:#f8f1ea;border-radius:12px;padding:12px;text-align:center}
+.stat-grid b{display:block;font-size:18px;color:#b8451f}
+.stat-grid small{color:#806f66;font-size:12px}
 .welcome .modal-card{max-width:420px}
 .welcome .primary,.welcome .ghost{width:100%;margin-top:8px}
 @media(min-width:681px){body{background:#eee3d8}.app-shell{box-shadow:0 0 40px #59351d1a}}

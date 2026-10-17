@@ -44,7 +44,7 @@ export function QueueTimer({ minutes }) {
   return <b className="queue-timer">{mm}:{String(ss).padStart(2, '0')}</b>
 }
 
-export function WelcomeModal({ onMember, onGuest }) {
+export function WelcomeModal({ onMember, onGuest, onAdmin }) {
   const [step, setStep] = useState('phone')
   const [phone, setPhone] = useState('')
   const [name, setName] = useState('')
@@ -60,7 +60,10 @@ export function WelcomeModal({ onMember, onGuest }) {
     setBusy(true)
     try {
       const data = await api('login', { phone: digits })
-      if (data.exists) onMember(data); else setStep('ask')
+      if (!data.exists) { setStep('ask'); return }
+      if (data.requiresPin) { onAdmin({ phone: digits, mode: 'pin', name: data.Name }); return }
+      if (data.needsPinSetup) { onAdmin({ phone: digits, mode: 'setup', name: data.Name }); return }
+      onMember(data)
     } catch (checkError) { setError(checkError.message) } finally { setBusy(false) }
   }
   async function register() {

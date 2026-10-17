@@ -196,14 +196,21 @@ export function CheckoutScreen({ cart, user, store, onOrderCreated, onStoreChang
   </section>
 }
 
-export function ProfileScreen({ user, onUser, onBack, store, onReorder }) {
-  const [phone, setPhone] = useState(user?.Phone || '')
+export function ProfileScreen({ user, onUser, onBack, store, onReorder, init }) {
+  const [phone, setPhone] = useState(init?.phone || user?.Phone || '')
   const [name, setName] = useState(user?.Name || '')
   const [register, setRegister] = useState(false)
+  const [step, setStep] = useState(init?.mode === 'pin' ? 'pin' : init?.mode === 'setup' ? 'setup' : 'phone')
+  const [pin, setPin] = useState('')
+  const [confirmPin, setConfirmPin] = useState('')
+  const [adminName, setAdminName] = useState(init?.name || '')
   const [error, setError] = useState('')
   const [history, setHistory] = useState([])
   const [expanded, setExpanded] = useState('')
+  const [currentPin, setCurrentPin] = useState('')
+  const [newPin, setNewPin] = useState('')
   const stampIcon = store.settings?.StampIcon
+  const isAdminRole = user && (user.Role === 'Admin' || user.Role === 'SuperAdmin')
 
   useEffect(() => {
     if (!user) return
@@ -217,9 +224,29 @@ export function ProfileScreen({ user, onUser, onBack, store, onReorder }) {
     try {
       const data = await api('login', { phone: digits, name, register })
       if (data.exists === false) { setRegister(true); setError('ยังไม่มีบัญชีนี้ กรุณาสมัครสมาชิก'); return }
+      if (data.needsPinSetup) { setAdminName(data.Name || ''); setPin(''); setConfirmPin(''); setStep('setup'); setError('บัญชีผู้ดูแล: กรุณาตั้งรหัส PIN สำหรับเข้าใช้งาน (จะใช้ทุกครั้งที่ล็อกอิน)'); return }
+      if (data.requiresPin) { setAdminName(data.Name || ''); setPin(''); setStep('pin'); setError(''); return }
       onUser(data)
       onBack()
     } catch (loginError) { setError(loginError.message) }
+  }
+  async function submitPin() {
+    setError('')
+    const digits = String(phone).replace(/\D/g, '')
+    if (!/^\d{4,8}$/.test(String(pin))) return setError('รหัส PIN ต้องเป็นตัวเลข 4-8 หลัก')
+    try { const data = await api('login', { phone: digits, pin }); onUser(data); onBack() } catch (pinError) { setError(pinError.message) }
+  }
+  async function submitSetup() {
+    setError('')
+    const digits = String(phone).replace(/\D/g, '')
+    if (!/^\d{4,8}$/.test(String(pin))) return setError('รหัส PIN ต้องเป็นตัวเลข 4-8 หลัก')
+    if (pin !== confirmPin) return setError('รหัส PIN ทั้งสองครั้งไม่ตรงกัน')
+    try { const data = await api('login', { phone: digits, pin }); onUser(data); onBack() } catch (setupError) { setError(setupError.message) }
+  }
+  async function changePin() {
+    setError('')
+    if (!/^\d{4,8}$/.test(String(newPin))) return setError('รหัส PIN ใหม่ต้องเป็นตัวเลข 4-8 หลัก')
+    try { await api('updateProfile', { phone: user.Phone, currentPin, newPin }); setCurrentPin(''); setNewPin(''); setError('เปลี่ยนรหัส PIN เรียบร้อย') } catch (pinError) { setError(pinError.message) }
   }
   async function saveProfile() {
     try { const data = await api('updateProfile', { phone: user.Phone, name }); onUser({ ...user, ...data }); setError('บันทึกแล้ว') } catch (profileError) { setError(profileError.message) }
@@ -229,6 +256,25 @@ export function ProfileScreen({ user, onUser, onBack, store, onReorder }) {
   }
   function logout() { onUser(null); onBack() }
 
+  if (!user && step === 'pin') return <section className="page">
+    <h1>ยืนยันรหัส PIN ผู้ดูแล</h1>
+    <p className="hint">{adminName ? `${adminName} · ` : ''}{phone}</p>
+    <Field label="รหัส PIN"><input type="password" inputMode="numeric" value={pin} onChange={event => setPin(event.target.value)} placeholder="กรอก PIN 4-8 หลัก" /></Field>
+    {error && <p className="hint error">{error}</p>}
+    <button className="primary" onClick={submitPin}>เข้าใช้งาน</button>
+    <button className="ghost" onClick={() => { setStep('phone'); setPin(''); setError('') }}>ย้อนกลับ</button>
+  </section>
+
+  if (!user && step === 'setup') return <section className="page">
+    <h1>ตั้งรหัส PIN ผู้ดูแล</h1>
+    <p className="hint">{adminName ? `${adminName} · ` : ''}{phone} — ครั้งแรกตั้งรหัสไว้ ครั้งต่อไปต้องกรอกทุกครั้ง</p>
+    <Field label="ตั้งรหัส PIN ใหม่"><input type="password" inputMode="numeric" value={pin} onChange={event => setPin(event.target.value)} placeholder="ตัวเลข 4-8 หลัก" /></Field>
+    <Field label="ยืนยันรหัส PIN"><input type="password" inputMode="numeric" value={confirmPin} onChange={event => setConfirmPin(event.target.value)} placeholder="กรอกอีกครั้ง" /></Field>
+    {error && <p className="hint error">{error}</p>}
+    <button className="primary" onClick={submitSetup}>บันทึกและเข้าใช้งาน</button>
+    <button className="ghost" onClick={() => { setStep('phone'); setPin(''); setConfirmPin(''); setError('') }}>ย้อนกลับ</button>
+  </section>
+
   if (!user) return <section className="page">
     <h1>{register ? 'สมัครสมาชิก DinoEater' : 'เข้าสู่ระบบสมาชิก'}</h1>
     <Field label="เบอร์โทรศัพท์"><input value={phone} inputMode="tel" onChange={event => setPhone(event.target.value)} placeholder="08x-xxx-xxxx" /></Field>
@@ -236,7 +282,7 @@ export function ProfileScreen({ user, onUser, onBack, store, onReorder }) {
     {error && <p className="hint error">{error}</p>}
     <button className="primary" onClick={login}>{register ? 'สมัครสมาชิก' : 'เข้าสู่ระบบ'}</button>
     <button className="ghost" onClick={() => { setRegister(!register); setError('') }}>{register ? 'มีบัญชีแล้ว เข้าสู่ระบบ' : 'ยังไม่มีบัญชี? สมัครสมาชิก'}</button>
-    <p className="hint">ใช้เบอร์โทรเข้าใช้งาน ไม่ต้องใช้ PIN · สะสมแสตมป์และดูประวัติการซื้อได้ทุกอุปกรณ์</p>
+    <p className="hint">ลูกค้าใช้แค่เบอร์โทร · บัญชีผู้ดูแลต้องกรอก PIN ทุกครั้งที่เข้า · สะสมแสตมป์และดูประวัติการซื้อได้ทุกอุปกรณ์</p>
   </section>
 
   return <section className="page">
@@ -270,6 +316,12 @@ export function ProfileScreen({ user, onUser, onBack, store, onReorder }) {
     <Field label="เปลี่ยนชื่อ"><input value={name} onChange={event => setName(event.target.value)} placeholder="ชื่อของคุณ" /></Field>
     <button className="secondary" onClick={saveProfile}>บันทึกชื่อ</button>
     <Field label="รูปโปรไฟล์"><input type="file" accept="image/*" onChange={event => savePicture(event.target.files[0])} /></Field>
+    {isAdminRole && <>
+      <h2>รหัส PIN ผู้ดูแล</h2>
+      <Field label="รหัส PIN ปัจจุบัน"><input type="password" inputMode="numeric" value={currentPin} onChange={event => setCurrentPin(event.target.value)} placeholder="กรอก PIN เดิม" /></Field>
+      <Field label="รหัส PIN ใหม่"><input type="password" inputMode="numeric" value={newPin} onChange={event => setNewPin(event.target.value)} placeholder="ตัวเลข 4-8 หลัก" /></Field>
+      <button className="secondary" onClick={changePin}>เปลี่ยนรหัส PIN</button>
+    </>}
     {error && <p className="hint">{error}</p>}
     <button className="ghost" onClick={logout}>ออกจากระบบ</button>
   </section>

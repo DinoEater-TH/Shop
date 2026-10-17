@@ -318,12 +318,16 @@ function AdminUsers({ token, role }) {
   const [users, setUsers] = useState([])
   const [error, setError] = useState('')
   const [query, setQuery] = useState('')
+  const [member, setMember] = useState(null)
   const load = async () => { try { setUsers(await api('getUsers', { sessionToken: token })); setError('') } catch (loadError) { setError(loadError.message) } }
   useEffect(() => { load() }, [token])
 
   async function adjust(user, amount) { try { await api('adjustStamps', { sessionToken: token, userId: user.ID, amount }); await load() } catch (adjustError) { setError(adjustError.message) } }
   async function changeRole(user, nextRole) { try { await api('setUserRole', { sessionToken: token, userId: user.ID, role: nextRole }); await load() } catch (roleError) { setError(roleError.message) } }
   async function remove(user) { if (!confirm(`ลบสมาชิก ${user.Phone}?`)) return; try { await api('deleteUser', { sessionToken: token, userId: user.ID }); await load() } catch (removeError) { setError(removeError.message) } }
+  async function openMember(user) { try { setMember(await api('getMemberDetail', { sessionToken: token, userId: user.ID })) } catch (memberError) { setError(memberError.message) } }
+
+  if (member) return <MemberDetail detail={member} onClose={() => setMember(null)} />
 
   const digits = query.replace(/\D/g, '')
   const filtered = query.trim()
@@ -332,13 +336,13 @@ function AdminUsers({ token, role }) {
 
   return <div>
     <h2>สมาชิกและแสตมป์</h2>
-    <Field label="ค้นหาด้วยเบอร์โทรหรือชื่อ" hint={`พบ ${filtered.length} บัญชี จากทั้งหมด ${users.length}`}>
+    <Field label="ค้นหาด้วยเบอร์โทรหรือชื่อ" hint={`พบ ${filtered.length} บัญชี จากทั้งหมด ${users.length} · แตะชื่อเพื่อดูประวัติ`}>
       <input value={query} inputMode="tel" onChange={event => setQuery(event.target.value)} placeholder="เช่น 0812345678 หรือชื่อลูกค้า" />
     </Field>
     {error && <p className="hint error">{error}</p>}
     {!filtered.length && !error && <p className="hint">ไม่พบบัญชีตามเงื่อนไข</p>}
     {filtered.map(user => <article className="order-card" key={user.ID}>
-      <b>{user.Name || 'ไม่ระบุชื่อ'} · {user.Phone}</b>
+      <button className="member-link" onClick={() => openMember(user)}>{user.Name || 'ไม่ระบุชื่อ'} · {user.Phone} ›</button>
       <span>บทบาท: {user.Role} · แสตมป์ {num(user.Stamps)}</span>
       <div className="row-actions">
         <button onClick={() => adjust(user, 1)}>+1 แสตมป์</button>
@@ -346,6 +350,40 @@ function AdminUsers({ token, role }) {
         {role === 'SuperAdmin' && user.Role !== 'SuperAdmin' && <button onClick={() => changeRole(user, user.Role === 'Admin' ? 'Customer' : 'Admin')}>{user.Role === 'Admin' ? 'ถอด Admin' : 'ตั้งเป็น Admin'}</button>}
         {role === 'SuperAdmin' && <button onClick={() => remove(user)}>ลบ</button>}
       </div>
+    </article>)}
+  </div>
+}
+
+function MemberDetail({ detail, onClose }) {
+  const { user, orders, stats } = detail
+  const [expanded, setExpanded] = useState('')
+  return <div>
+    <button className="ghost" onClick={onClose}>← กลับรายชื่อสมาชิก</button>
+    <h2>โปรไฟล์สมาชิก</h2>
+    <div className="profile-head">
+      <img src={user.ProfilePic || ''} alt="" onError={event => { event.target.style.visibility = 'hidden' }} />
+      <div>
+        <b>{user.Name || 'ไม่ระบุชื่อ'}</b>
+        <small>{user.Phone}</small>
+        <small>บทบาท: {user.Role} · สมัคร {fmtTime(user.CreatedAt)}</small>
+      </div>
+    </div>
+    <div className="stat-grid">
+      <div><b>{num(user.Stamps)}</b><small>แสตมป์</small></div>
+      <div><b>{num(stats.orderCount)}</b><small>ออเดอร์ทั้งหมด</small></div>
+      <div><b>{num(stats.completedCount)}</b><small>สำเร็จ</small></div>
+      <div><b>{baht(stats.totalSpent)}</b><small>ยอดใช้จ่าย</small></div>
+      <div><b>{num(stats.cash)} / {num(stats.transfer)}</b><small>เงินสด / โอนเงิน</small></div>
+    </div>
+    <h2>ประวัติการสั่งซื้อ</h2>
+    {!orders.length && <p className="hint">ยังไม่มีประวัติการสั่งซื้อ</p>}
+    {orders.map(order => <article className="order-card" key={order.OrderID}>
+      <div className="row-between"><b>{fmtTime(order.CreatedAt)}</b><StatusBadge status={order.Status} /></div>
+      <small>{order.OrderType === 'Delivery' ? 'จัดส่ง' : 'รับเอง'} · {order.PaymentMethod === 'Transfer' ? 'โอนเงิน' : 'เงินสด'} · {baht(order.Total)}</small>
+      <button className="ghost compact" onClick={() => setExpanded(expanded === order.OrderID ? '' : order.OrderID)}>{expanded === order.OrderID ? 'ซ่อนรายการ' : 'ดูรายการ'}</button>
+      {expanded === order.OrderID && <div className="receipt">
+        {(order.items || []).map(item => <div key={item.ID}><span>{item.MenuID} × {item.Quantity}</span><b>{baht(num(item.Price) * num(item.Quantity))}</b></div>)}
+      </div>}
     </article>)}
   </div>
 }

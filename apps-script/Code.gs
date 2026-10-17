@@ -61,6 +61,7 @@ function dispatch_(request) {
     if (action === 'savePromotion') return ok_(savePromotion_(request));
     if (action === 'saveSettings') return ok_(saveSettings_(request));
     if (action === 'getUsers') return ok_(getUsers_(request));
+    if (action === 'getMemberDetail') return ok_(getMemberDetail_(request));
     if (action === 'setUserRole') return ok_(setUserRole_(request));
     if (action === 'updateUser') return ok_(updateUser_(request));
     if (action === 'deleteUser') return ok_(deleteUser_(request));
@@ -208,10 +209,25 @@ function login_(request) {
     append_('Users', existing);
   }
   if (!existing) return { exists: false, Phone: phone };
+  const role = String(existing.Role || 'Customer');
+  if (role === 'Admin' || role === 'SuperAdmin') {
+    const stored = String(existing.PIN || '').trim();
+    if (!stored) {
+      if (!request.pin) return { exists: true, needsPinSetup: true, Phone: phone, Name: existing.Name, Role: role };
+      if (!/^\d{4,8}$/.test(String(request.pin))) throw new Error('รหัส PIN ต้องเป็นตัวเลข 4-8 หลัก');
+      updateRow_('Users', 'ID', existing.ID, { PIN: String(request.pin) });
+      existing.PIN = String(request.pin);
+      log_(existing.ID, 'SET_PIN', 'admin set login PIN');
+    } else {
+      if (!request.pin) return { exists: true, requiresPin: true, Phone: phone, Name: existing.Name, Role: role };
+      if (String(request.pin) !== stored) throw new Error('รหัส PIN ไม่ถูกต้อง');
+    }
+  }
   const user = syncStamps_(phone, existing.ID);
   const firstOrder = ordersByUser_(existing.ID).length === 0;
-  return Object.assign({}, user, { Phone: phone, IsFirstOrder: firstOrder, exists: true, SessionToken: session_(user) });
+  return Object.assign({}, publicUser_(user), { Phone: phone, IsFirstOrder: firstOrder, exists: true, SessionToken: session_(user) });
 }
+function publicUser_(user) { const copy = Object.assign({}, user); delete copy.PIN; return copy; }
 function updateProfile_(request) {
   const phone = phone_(request.phone);
   const user = rows_('Users').filter(function (row) { return phone_(row.Phone) === phone; })[0];
@@ -221,10 +237,39 @@ function updateProfile_(request) {
   if (request.address !== undefined) changes.Address = request.address;
   if (request.lat !== undefined) changes.Lat = request.lat;
   if (request.lng !== undefined) changes.Lng = request.lng;
+  if (request.newPin !== undefined) {
+    const userRole = String(user.Role || 'Customer');
+    if (userRole !== 'Admin' && userRole !== 'SuperAdmin') throw new Error('เฉพาะผู้ดูแลที่ตั้งรหัส PIN ได้');
+    const stored = String(user.PIN || '').trim();
+    if (stored && String(request.currentPin || '') !== stored) throw new Error('รหัส PIN ปัจจุบันไม่ถูกต้อง');
+    if (!/^\d{4,8}$/.test(String(request.newPin))) throw new Error('รหัส PIN ต้องเป็นตัวเลข 4-8 หลัก');
+    changes.PIN = String(request.newPin);
+    log_(user.ID, 'CHANGE_PIN', 'admin changed login PIN');
+  }
   if (request.profilePicBase64) changes.ProfilePic = uploadBase64_(request.profilePicBase64, 'profile-' + user.ID + '.jpg');
   if (!Object.keys(changes).length) throw new Error('ไม่มีข้อมูลที่จะแก้ไข');
   updateRow_('Users', 'ID', user.ID, changes);
-  return Object.assign({}, user, changes);
+  return Object.assign({}, publicUser_(user), changes);
+}
+function getMemberDetail_(request) {
+  requireAdmin_(request.sessionToken);
+  const user = find_('Users', 'ID', request.userId);
+  const items = rows_('OrderItems');
+  const orders = rows_('Orders').filter(function (order) { return String(order.UserID) === String(user.ID); })
+    .sort(function (a, b) { return String(b.CreatedAt).localeCompare(String(a.CreatedAt)); })
+    .map(function (order) { return Object.assign({}, order, { items: items.filter(function (item) { return String(item.OrderID) === String(order.OrderID); }) }); });
+  const completed = orders.filter(function (order) { return String(order.Status) === 'Completed'; });
+  return {
+    user: publicUser_(user),
+    orders: orders,
+    stats: {
+      orderCount: orders.length,
+      completedCount: completed.length,
+      totalSpent: completed.reduce(function (sum, order) { return sum + number_(order.Total); }, 0),
+      cash: orders.filter(function (order) { return String(order.PaymentMethod) === 'Cash'; }).length,
+      transfer: orders.filter(function (order) { return String(order.PaymentMethod) === 'Transfer'; }).length
+    }
+  };
 }
 
 /* ---------- store ---------- */
@@ -423,10 +468,11 @@ function updateUser_(request) {
   const changes = {};
   if (request.name) changes.Name = request.name;
   if (request.role) { if (admin.Role !== 'SuperAdmin') throw new Error('เฉพาะ SuperAdmin เท่านั้น'); if (['Admin', 'SuperAdmin', 'Customer'].indexOf(request.role) < 0) throw new Error('บทบาทไม่ถูกต้อง'); changes.Role = request.role; }
+  if (request.pin !== undefined) { if (admin.Role !== 'SuperAdmin') throw new Error('เฉพาะ SuperAdmin เท่านั้น'); if (request.pin && !/^\d{4,8}$/.test(String(request.pin))) throw new Error('รหัส PIN ต้องเป็นตัวเลข 4-8 หลัก'); changes.PIN = String(request.pin || ''); }
   if (!Object.keys(changes).length) throw new Error('ไม่มีข้อมูลที่จะแก้ไข');
   updateRow_('Users', 'ID', request.userId, changes);
   log_(admin.ID, 'USER_UPDATE', request.userId + ' ' + Object.keys(changes).join(','));
-  return find_('Users', 'ID', request.userId);
+  return publicUser_(find_('Users', 'ID', request.userId));
 }
 function deleteUser_(request) {
   const admin = requireSuper_(request.sessionToken);

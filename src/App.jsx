@@ -17,6 +17,7 @@ export default function App() {
   const [chatOpen, setChatOpen] = useState(false)
   const [chat, setChat] = useState(null)
   const [welcome, setWelcome] = useState(() => !localStorage.getItem('dino-welcome') && !localStorage.getItem('dino-user'))
+  const [profileInit, setProfileInit] = useState(null)
   const previousStatus = useRef(null)
 
   async function loadStore() {
@@ -118,6 +119,12 @@ export default function App() {
     localStorage.setItem('dino-welcome', 'done')
     setWelcome(false)
   }
+  function handleWelcomeAdmin(info) {
+    localStorage.setItem('dino-welcome', 'done')
+    setWelcome(false)
+    setProfileInit(info)
+    setScreen('profile')
+  }
 
   return <div className="app-shell">
     <header>
@@ -133,10 +140,10 @@ export default function App() {
     {screen === 'store' && <StoreScreen store={store} user={user} onProfile={logoutOrLogin} />}
     {screen === 'cart' && <CartScreen cart={cart} updateQuantity={updateQuantity} onCheckout={() => setScreen('checkout')} onContinue={() => setScreen('menu')} />}
     {screen === 'checkout' && <CheckoutScreen cart={cart} user={user} store={store} onStoreChange={(_, nextUser) => nextUser && setUser({ ...user, ...nextUser })} onOrderCreated={created => { setCart([]); setChatOpen(false); previousStatus.current = created.Status; setOrder(created); setScreen('order') }} />}
-    {screen === 'profile' && <ProfileScreen user={user} onUser={setUser} onBack={() => setScreen('menu')} store={store} onReorder={reorder} />}
+    {screen === 'profile' && <ProfileScreen user={user} onUser={setUser} onBack={() => { setProfileInit(null); setScreen('menu') }} store={store} onReorder={reorder} init={profileInit} />}
     {screen === 'order' && <OrderStatusScreen order={order} store={store} user={user} chatOpen={chatOpen} chat={chat} onOpenChat={openChat} onSend={sendChat} onMenu={() => { setChatOpen(false); setScreen('menu') }} onRegistered={handleRegistered} />}
     {screen === 'admin' && <AdminScreen store={store} reloadStore={loadStore} user={user} requireLogin={() => setScreen('profile')} />}
-    {welcome && !user && <WelcomeModal onMember={handleWelcomeMember} onGuest={handleWelcomeGuest} />}
+    {welcome && !user && <WelcomeModal onMember={handleWelcomeMember} onGuest={handleWelcomeGuest} onAdmin={handleWelcomeAdmin} />}
 
     <nav>
       <button onClick={() => setScreen('menu')}>เมนู</button>
