@@ -1,5 +1,19 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { baht, currentPosition, distanceKm, loadMaps, num } from './api'
+import L from 'leaflet'
+import 'leaflet/dist/leaflet.css'
+import { baht, currentPosition, distanceKm, num, storeCoords, storeDirectionsUrl } from './api'
+
+const OSM_URL = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'
+const OSM_ATTR = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+const DEFAULT_CENTER = { lat: 13.7563, lng: 100.5018 }
+
+function pinIcon() {
+  return L.divIcon({ className: 'map-pin', html: '<span>📍</span>', iconSize: [30, 30], iconAnchor: [15, 28], popupAnchor: [0, -26] })
+}
+
+function addTiles(map) {
+  L.tileLayer(OSM_URL, { attribution: OSM_ATTR, maxZoom: 19 }).addTo(map)
+}
 
 export function Empty({ text, action, onAction }) {
   return <div className="empty"><div className="empty-icon">🍢</div><p>{text}</p>{action && <button className="primary" onClick={onAction}>{action}</button>}</div>
@@ -34,39 +48,79 @@ export function MapPicker({ store, value, onChange }) {
   const map = useRef(null)
   const marker = useRef(null)
   const [error, setError] = useState('')
-  const [manual, setManual] = useState(false)
+  const start = value && value.lat ? { lat: num(value.lat), lng: num(value.lng) } : storeCoords(store)
+  const startLat = start?.lat, startLng = start?.lng
+
+  function place(point, recenter) {
+    onChange(point)
+    if (!map.current) return
+    const latlng = [point.lat, point.lng]
+    if (marker.current) marker.current.setLatLng(latlng)
+    else marker.current = L.marker(latlng, { icon: pinIcon(), draggable: true }).addTo(map.current).on('dragend', event => onChange(latlngOf(event.target)))
+    if (recenter) map.current.setView(latlng, 16)
+  }
 
   useEffect(() => {
-    let cancelled = false
-    loadMaps().then(maps => {
-      if (cancelled || !holder.current) return
-      const center = value ? { lat: num(value.lat), lng: num(value.lng) } : { lat: num(store.StoreLat) || 13.7563, lng: num(store.StoreLng) || 100.5018 }
-      map.current = new maps.Map(holder.current, { center, zoom: value ? 16 : 13 })
-      marker.current = new maps.Marker({ map: map.current, position: center, draggable: true })
-      maps.event.addListener(marker.current, 'dragend', event => onChange({ lat: event.latLng.lat(), lng: event.latLng.lng() }))
-      maps.event.addListener(map.current, 'click', event => { marker.current.setPosition(event.latLng); onChange({ lat: event.latLng.lat(), lng: event.latLng.lng() }) })
-      if (num(store.StoreLat) && num(store.StoreLng)) new maps.Marker({ map: map.current, position: { lat: num(store.StoreLat), lng: num(store.StoreLng) }, icon: { url: 'https://maps.google.com/mapfiles/ms/icons/orange-dot.png' } })
-    }).catch(() => setManual(true))
-    return () => { cancelled = true }
+    if (!holder.current) return
+    const center = startLat && startLng ? { lat: startLat, lng: startLng } : DEFAULT_CENTER
+    const instance = L.map(holder.current).setView([center.lat, center.lng], startLat ? 16 : 12)
+    addTiles(instance)
+    if (startLat && startLng) marker.current = L.marker([startLat, startLng], { icon: pinIcon(), draggable: true }).addTo(instance).on('dragend', event => onChange(latlngOf(event.target)))
+    instance.on('click', event => place({ lat: event.latlng.lat, lng: event.latlng.lng }, false))
+    map.current = instance
+    return () => { instance.remove(); map.current = null; marker.current = null }
   }, [])
 
   async function useCurrentLocation() {
     try {
       const point = await currentPosition()
-      onChange(point)
-      if (map.current && marker.current) { marker.current.setPosition(point); map.current.setCenter(point); map.current.setZoom(16) }
+      place(point, true)
       setError('')
     } catch (locationError) { setError(locationError.message) }
   }
 
   return <div className="map-picker">
-    {!manual && <div className="map-canvas" ref={holder} />}
+    <div className="map-canvas" ref={holder} />
     <div className="map-actions">
       <button type="button" onClick={useCurrentLocation}>📍 ใช้ตำแหน่งปัจจุบัน</button>
-      {manual && <label className="manual-coords">พิกัด<input value={value ? `${num(value.lat).toFixed(4)}, ${num(value.lng).toFixed(4)}` : ''} readOnly placeholder="กดใช้ตำแหน่งปัจจุบัน" /></label>}
+      <label className="manual-coords">พิกัด
+        <input value={value?.lat ? `${num(value.lat).toFixed(5)}, ${num(value.lng).toFixed(5)}` : ''} readOnly placeholder="แตะบนแผนที่หรือใช้ตำแหน่งปัจจุบัน" />
+      </label>
     </div>
-    {value && <p className="hint">ระยะทางจากร้าน {distanceKm(store, value)} กม.</p>}
+    <p className="hint">แตะบนแผนที่หรือลากหมุดเพื่อปักตำแหน่งร้าน</p>
+    {value && value.lat ? <p className="hint">ระยะทางจากร้านถึงจุดนี้ {distanceKm(store, value)} กม.</p> : null}
     {error && <p className="hint error">{error}</p>}
+  </div>
+}
+
+function latlngOf(marker) { const point = marker.getLatLng(); return { lat: point.lat, lng: point.lng } }
+
+export function StoreMap({ settings, height = 260 }) {
+  const holder = useRef(null)
+  const coords = storeCoords(settings)
+  const directions = storeDirectionsUrl(settings)
+  const lat = coords?.lat, lng = coords?.lng
+
+  useEffect(() => {
+    if (!lat || !lng || !holder.current) return
+    const instance = L.map(holder.current, { scrollWheelZoom: false }).setView([lat, lng], 16)
+    addTiles(instance)
+    L.marker([lat, lng], { icon: pinIcon() }).addTo(instance).bindPopup(settings.StoreName || 'ร้าน')
+    setTimeout(() => instance.invalidateSize(), 0)
+    return () => instance.remove()
+  }, [lat, lng])
+
+  if (!coords && !settings.StoreAddress) return null
+  return <div className="store-map">
+    {coords
+      ? <div className="map-canvas" style={{ height }} ref={holder} />
+      : <div className="map-fallback" style={{ minHeight: height }}>
+        <span>📍</span>
+        <b>{settings.StoreName || 'ร้าน'}</b>
+        {settings.StoreAddress && <small>{settings.StoreAddress}</small>}
+        <small className="hint">ร้านยังไม่ปักหมุดตำแหน่งบนแผนที่</small>
+      </div>}
+    {directions && <button className="primary" onClick={() => window.open(directions, '_blank')}>🧭 นำทางไปร้าน</button>}
   </div>
 }
 

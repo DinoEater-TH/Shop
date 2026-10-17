@@ -1,5 +1,4 @@
 const API_URL = import.meta.env.VITE_API_URL || ''
-export const MAPS_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || ''
 export const SITE_URL = import.meta.env.BASE_URL || '/'
 
 export async function api(action, data = {}) {
@@ -32,17 +31,23 @@ export function deliveryFeeFor(settings, subtotal, distance) {
   return chargeKm * num(settings.DeliveryFeePerKm)
 }
 
-export function loadMaps() {
-  return new Promise((resolve, reject) => {
-    if (!MAPS_KEY) return reject(new Error('ยังไม่ได้ตั้งค่า Google Maps API key'))
-    if (window.google && window.google.maps) return resolve(window.google.maps)
-    const script = document.createElement('script')
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${MAPS_KEY}`
-    script.async = true
-    script.onload = () => resolve(window.google.maps)
-    script.onerror = () => reject(new Error('โหลด Google Maps ไม่สำเร็จ'))
-    document.head.appendChild(script)
-  })
+export function storeCoords(settings) {
+  const lat = num(settings?.StoreLat), lng = num(settings?.StoreLng)
+  return lat && lng ? { lat, lng } : null
+}
+
+export function storeDirectionsUrl(settings) {
+  const coords = storeCoords(settings)
+  if (coords) return `https://www.google.com/maps/dir/?api=1&destination=${coords.lat},${coords.lng}`
+  const query = settings?.StoreAddress || settings?.StoreName || ''
+  return query ? `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(query)}` : ''
+}
+
+export function storeMapUrl(settings) {
+  const coords = storeCoords(settings)
+  if (coords) return `https://www.google.com/maps/search/?api=1&query=${coords.lat},${coords.lng}`
+  const query = settings?.StoreAddress || settings?.StoreName || ''
+  return query ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}` : ''
 }
 
 export function currentPosition() {

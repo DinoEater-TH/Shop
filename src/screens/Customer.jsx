@@ -1,8 +1,10 @@
 import React, { useEffect, useState } from 'react'
-import { api, baht, compressImage, deliveryFeeFor, distanceKm, num, promoOf } from '../api'
-import { ChatRoom, Empty, Field, MapPicker, Receipt, StatusBadge } from '../components'
+import { api, baht, compressImage, deliveryFeeFor, distanceKm, num, promoOf, storeDirectionsUrl } from '../api'
+import { ChatRoom, Empty, Field, MapPicker, Receipt, StatusBadge, StoreMap } from '../components'
 
-export function MenuScreen({ menu, addItem, onLightbox, onProfile, user }) {
+export function MenuScreen({ menu, addItem, onLightbox, onProfile, onStore, user, store }) {
+  const settings = store?.settings || {}
+  const directions = storeDirectionsUrl(settings)
   return <section>
     <div className="hero">
       <p>ทอดใหม่ทุกออเดอร์</p>
@@ -27,6 +29,38 @@ export function MenuScreen({ menu, addItem, onLightbox, onProfile, user }) {
       </article>)}
       {!menu.length && <Empty text="ร้านยังไม่เพิ่มเมนู" />}
     </div>
+    <div className="section-title"><h2>ที่ตั้งร้าน</h2></div>
+    <div className="store-card">
+      <div className="store-card-head">
+        <span className="store-pin">📍</span>
+        <div>
+          <b>{settings.StoreName || 'DinoEater'}</b>
+          {settings.StoreAddress && <small>{settings.StoreAddress}</small>}
+        </div>
+      </div>
+      <div className="store-card-actions">
+        <button className="secondary" onClick={onStore}>ดูแผนที่ร้าน</button>
+        {directions && <button className="primary" onClick={() => window.open(directions, '_blank')}>🧭 นำทาง</button>}
+      </div>
+    </div>
+  </section>
+}
+
+export function StoreScreen({ store, onProfile, user }) {
+  const settings = store.settings || {}
+  return <section className="page">
+    <h1>ที่ตั้งร้าน</h1>
+    <div className="profile-head">
+      <span className="store-pin big">📍</span>
+      <div>
+        <b>{settings.StoreName || 'DinoEater'}</b>
+        {settings.StoreAddress ? <small>{settings.StoreAddress}</small> : <small className="hint">ร้านยังไม่ระบุที่อยู่</small>}
+        {settings.StorePhone && <small>โทร <a href={`tel:${settings.StorePhone}`}>{settings.StorePhone}</a></small>}
+      </div>
+    </div>
+    <StoreMap settings={settings} />
+    {!storeDirectionsUrl(settings) && <p className="hint">ร้านยังไม่ปักหมุดตำแหน่ง กรุณาติดต่อร้านโดยตรง</p>}
+    <button className="ghost" onClick={onProfile}>{user ? 'บัญชีของฉัน' : 'เข้าสู่ระบบสมาชิก'}</button>
   </section>
 }
 
@@ -245,6 +279,7 @@ export function OrderStatusScreen({ order, store, user, onOpenChat, chatOpen, ch
       <div className="grand"><span>ยอดสุทธิ</span><b>{baht(order.Total)}</b></div>
     </div>
     {order.SlipURL && <p className="hint">สลิปที่แนบ: <a href={order.SlipURL} target="_blank" rel="noreferrer">ดูสลิป</a></p>}
+    {order.OrderType === 'Pickup' && storeDirectionsUrl(settings) && <button className="secondary" onClick={() => window.open(storeDirectionsUrl(settings), '_blank')}>🧭 นำทางไปรับที่ร้าน</button>}
     {canReport && !chatOpen && <button className="secondary" onClick={() => onOpenChat(order, 'รายงานปัญหา: ')}>⚠️ รายงานปัญหา (ภายใน {disputeMinutes} นาที)</button>}
     {chatOpen && <ChatRoom chat={chat} send={onSend} phone={user?.Phone || order.Phone} onResolve={onResolve} canResolve={false} />}
     {!chatOpen && <button className="primary" onClick={onMenu}>กลับสู่เมนู</button>}

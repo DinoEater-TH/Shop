@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { api, beep, isAdmin } from './api'
 import { Lightbox } from './components'
-import { CartScreen, CheckoutScreen, MenuScreen, OrderStatusScreen, ProfileScreen } from './screens/Customer'
+import { CartScreen, CheckoutScreen, MenuScreen, OrderStatusScreen, ProfileScreen, StoreScreen } from './screens/Customer'
 import AdminScreen from './screens/Admin'
 
 const DEFAULT_STORE = { settings: {}, menu: [], promotions: [] }
@@ -89,7 +89,8 @@ export default function App() {
     </header>
     {notice && <div className="notice">{notice}<button onClick={() => setNotice('')}>×</button></div>}
 
-    {screen === 'menu' && <MenuScreen menu={store.menu} addItem={addItem} user={user} onProfile={logoutOrLogin} onLightbox={(src, title) => setLightbox({ src, title })} />}
+    {screen === 'menu' && <MenuScreen menu={store.menu} addItem={addItem} user={user} store={store} onProfile={logoutOrLogin} onStore={() => setScreen('store')} onLightbox={(src, title) => setLightbox({ src, title })} />}
+    {screen === 'store' && <StoreScreen store={store} user={user} onProfile={logoutOrLogin} />}
     {screen === 'cart' && <CartScreen cart={cart} updateQuantity={updateQuantity} onCheckout={() => setScreen('checkout')} onContinue={() => setScreen('menu')} />}
     {screen === 'checkout' && <CheckoutScreen cart={cart} user={user} store={store} onStoreChange={(_, nextUser) => nextUser && setUser({ ...user, ...nextUser })} onOrderCreated={created => { setCart([]); setChatOpen(false); previousStatus.current = created.Status; setOrder(created); setScreen('order') }} />}
     {screen === 'profile' && <ProfileScreen user={user} onUser={setUser} onBack={() => setScreen('menu')} store={store} />}
@@ -100,6 +101,7 @@ export default function App() {
       <button onClick={() => setScreen('menu')}>เมนู</button>
       <button onClick={() => setScreen('order')}>ออเดอร์</button>
       <button onClick={() => setScreen('cart')}>ตะกร้า {cartCount > 0 && `(${cartCount})`}</button>
+      <button onClick={() => setScreen('store')}>ที่ตั้งร้าน</button>
       <button onClick={() => setScreen('profile')}>บัญชี</button>
       {isAdmin(user) && <button onClick={() => setScreen('admin')}>ร้านค้า</button>}
     </nav>
