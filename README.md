@@ -21,3 +21,17 @@ Google Account ที่ Deploy ต้องมีสิทธิ์ Editor ข�
 บัญชีผู้ดูแล: หลังรัน `setupDatabase()` ให้เพิ่มแถวในชีต `Users` ด้วยเบอร์โทรและ PIN ของผู้ดูแล แล้วกำหนดคอลัมน์ `Role` เป็น `Admin` หรือ `SuperAdmin` ระบบจะออก session 6 ชั่วโมงหลังเข้าสู่ระบบ และคำสั่งดู/เปลี่ยนสถานะออเดอร์กับการตั้งค่าจะตรวจสิทธิ์ที่ API
 
 > ระบบคำนวณยอดอาหาร ค่าจัดส่ง ส่วนลด และแสตมป์บน Frontend ก่อนบันทึกตามข้อกำหนด ควรใช้สิทธิ์ Admin เฉพาะผู้ดูแลที่เชื่อถือได้เมื่อเปิดใช้งานจริง
+
+## Deploy ขึ้น GitHub Pages
+
+เว็บอยู่ที่ https://dinoeater-th.github.io/Shop/ และ deploy อัตโนมัติเมื่อ push เข้า `main` ผ่าน `.github/workflows/deploy.yml`
+
+ตั้งค่าที่ repo: `Settings` > `Pages` > `Source` ต้องเป็น **GitHub Actions** ทุกครั้งที่ push เข้า `main` ระบบจะ build ด้วย `npm ci` + `npm run build` แล้ว publish โฟลเดอร์ `dist` ให้เอง
+
+ค่าตั้งของ build มาจาก `.env.production` (API URL แบบ public) และ `vite.config.js` กำหนด `base: '/Shop/'` ให้ตรงกับ path ของ repo
+
+## ข้อมูลทดสอบ
+
+- SuperAdmin: เบอร์ `0800000000` / PIN `1234`
+- คำสั่ง `seedDemo` ใน Apps Script ใส่เมนูตัวอย่าง 4 รายการและบัญชี SuperAdmin เมื่อชีตยังว่าง
+
