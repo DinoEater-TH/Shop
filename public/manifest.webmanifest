@@ -1,0 +1,12 @@
+{
+  "name": "DinoEater Shop",
+  "short_name": "DinoEater",
+  "description": "สั่งลูกชิ้นทอด เกี๊ยวทอด จากร้าน DinoEater",
+  "lang": "th",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#fffaf2",
+  "theme_color": "#e4572e",
+  "icons": []
+}
