@@ -267,6 +267,7 @@ function AdminSettings({ store, token, reloadStore }) {
 function AdminUsers({ token, role }) {
   const [users, setUsers] = useState([])
   const [error, setError] = useState('')
+  const [query, setQuery] = useState('')
   const load = async () => { try { setUsers(await api('getUsers', { sessionToken: token })); setError('') } catch (loadError) { setError(loadError.message) } }
   useEffect(() => { load() }, [token])
 
@@ -274,10 +275,19 @@ function AdminUsers({ token, role }) {
   async function changeRole(user, nextRole) { try { await api('setUserRole', { sessionToken: token, userId: user.ID, role: nextRole }); await load() } catch (roleError) { setError(roleError.message) } }
   async function remove(user) { if (!confirm(`ลบสมาชิก ${user.Phone}?`)) return; try { await api('deleteUser', { sessionToken: token, userId: user.ID }); await load() } catch (removeError) { setError(removeError.message) } }
 
+  const digits = query.replace(/\D/g, '')
+  const filtered = query.trim()
+    ? users.filter(user => (digits && String(user.Phone || '').includes(digits)) || String(user.Name || '').toLowerCase().includes(query.trim().toLowerCase()))
+    : users
+
   return <div>
     <h2>สมาชิกและแสตมป์</h2>
+    <Field label="ค้นหาด้วยเบอร์โทรหรือชื่อ" hint={`พบ ${filtered.length} บัญชี จากทั้งหมด ${users.length}`}>
+      <input value={query} inputMode="tel" onChange={event => setQuery(event.target.value)} placeholder="เช่น 0812345678 หรือชื่อลูกค้า" />
+    </Field>
     {error && <p className="hint error">{error}</p>}
-    {users.map(user => <article className="order-card" key={user.ID}>
+    {!filtered.length && !error && <p className="hint">ไม่พบบัญชีตามเงื่อนไข</p>}
+    {filtered.map(user => <article className="order-card" key={user.ID}>
       <b>{user.Name || 'ไม่ระบุชื่อ'} · {user.Phone}</b>
       <span>บทบาท: {user.Role} · แสตมป์ {num(user.Stamps)}</span>
       <div className="row-actions">

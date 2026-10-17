@@ -7,7 +7,7 @@ const TABLES = {
   Settings: ['Key', 'Value'],
   Users: ['ID', 'Phone', 'PIN', 'Name', 'ProfilePic', 'Role', 'Stamps', 'CreatedAt'],
   Menu: ['ID', 'Name', 'Description', 'Price', 'ImageURL', 'Stock', 'IsActive'],
-  Orders: ['OrderID', 'UserID', 'Phone', 'OrderType', 'AddressDetail', 'Lat', 'Lng', 'Distance', 'DeliveryFee', 'PaymentMethod', 'SubTotal', 'Discount', 'Total', 'Status', 'SlipURL', 'EstimatedTime', 'CreatedAt', 'CompletedAt'],
+  Orders: ['OrderID', 'UserID', 'Phone', 'OrderType', 'AddressDetail', 'Lat', 'Lng', 'Distance', 'DeliveryFee', 'PaymentMethod', 'SubTotal', 'Discount', 'Total', 'Status', 'SlipURL', 'EstimatedTime', 'CreatedAt', 'CompletedAt', 'StampEarned'],
   OrderItems: ['ID', 'OrderID', 'MenuID', 'Quantity', 'Price'],
   Promotions: ['PromoType', 'Condition', 'DiscountValue', 'FreeMenuID', 'IsActive'],
   ChatDisputes: ['ChatID', 'OrderID', 'SenderRole', 'Message', 'Timestamp', 'Status'],
@@ -52,6 +52,7 @@ function dispatch_(request) {
     if (action === 'createOrder') return ok_(createOrder_(request));
     if (action === 'getOrder') return ok_(getOrder_(request));
     if (action === 'getOrders') return ok_(getOrders_(request));
+    if (action === 'getCustomerOrders') return ok_(getCustomerOrders_(request));
     if (action === 'updateOrderStatus') return ok_(updateStatus_(request));
     if (action === 'getMenu') return ok_(getMenu_(request));
     if (action === 'saveMenu') return ok_(saveMenu_(request));
@@ -81,7 +82,12 @@ function setupDatabase() {
   Object.keys(TABLES).forEach(function (name) {
     let sheet = ss.getSheetByName(name);
     if (!sheet) sheet = ss.insertSheet(name);
-    if (sheet.getLastRow() === 0) sheet.appendRow(TABLES[name]);
+    if (sheet.getLastRow() === 0) {
+      sheet.appendRow(TABLES[name]);
+    } else {
+      const headers = sheet.getRange(1, 1, 1, Math.max(1, sheet.getLastColumn())).getValues()[0].map(function (value) { return String(value); });
+      TABLES[name].forEach(function (key) { if (headers.indexOf(key) < 0) { headers.push(key); sheet.getRange(1, headers.length).setValue(key); } });
+    }
     sheet.setFrozenRows(1);
   });
   const settings = ss.getSheetByName('Settings');
@@ -90,6 +96,11 @@ function setupDatabase() {
     if (known.indexOf(key) < 0) settings.appendRow([key, DEFAULT_SETTINGS[key]]);
   });
   if (rows_('Promotions').length === 0) DEFAULT_PROMOTIONS.forEach(function (promo) { append_('Promotions', promo); });
+  rows_('Orders').forEach(function (row) {
+    if (String(row.Status) === 'Completed' && String(row.UserID) && String(row.StampEarned).toUpperCase() !== 'TRUE') {
+      updateRow_('Orders', 'OrderID', row.OrderID, { StampEarned: 'TRUE' });
+    }
+  });
   return 'Database ready';
 }
 
@@ -103,7 +114,7 @@ function seedDemo_() {
   if (rows_('Menu').length === 0) demoMenu.forEach(function (item) { append_('Menu', item); });
   const adminPhone = '0800000000';
   const hasAdmin = rows_('Users').some(function (row) { return phone_(row.Phone) === adminPhone; });
-  if (!hasAdmin) append_('Users', { ID: 'U' + Date.now(), Phone: adminPhone, PIN: '1234', Name: 'เจ้าของร้าน', ProfilePic: '', Role: 'SuperAdmin', Stamps: 0, CreatedAt: new Date() });
+  if (!hasAdmin) append_('Users', { ID: 'U' + Date.now(), Phone: adminPhone, PIN: '', Name: 'เจ้าของร้าน', ProfilePic: '', Role: 'SuperAdmin', Stamps: 0, CreatedAt: new Date() });
   if (rows_('Promotions').length === 0) DEFAULT_PROMOTIONS.forEach(function (promo) { append_('Promotions', promo); });
   return 'Demo data ready';
 }
@@ -153,21 +164,46 @@ function requireAdmin_(token) {
 function requireSuper_(token) { const user = requireAdmin_(token); if (user.Role !== 'SuperAdmin') throw new Error('เฉพาะ SuperAdmin เท่านั้น'); return user; }
 function log_(adminId, actionType, detail) { append_('AuditLogs', { LogID: 'L' + Utilities.getUuid(), AdminID: adminId || '', ActionType: actionType, Detail: detail, Timestamp: new Date() }); }
 
+function stampEarned_(total, settings) {
+  const spend = number_(settings.StampSpendAmount);
+  return spend > 0 ? Math.floor(number_(total) / spend) : 0;
+}
+function syncStamps_(phone, userId) {
+  const user = find_('Users', 'ID', userId);
+  const settings = settings_();
+  let earned = 0;
+  rows_('Orders').forEach(function (order) {
+    if (phone_(order.Phone) !== phone) return;
+    const changes = {};
+    if (!String(order.UserID)) changes.UserID = userId;
+    if (String(order.Status) === 'Completed' && String(order.StampEarned).toUpperCase() !== 'TRUE') {
+      changes.StampEarned = 'TRUE';
+      earned += stampEarned_(order.Total, settings);
+    }
+    if (Object.keys(changes).length) updateRow_('Orders', 'OrderID', order.OrderID, changes);
+  });
+  if (earned > 0) {
+    const next = number_(user.Stamps) + earned;
+    updateRow_('Users', 'ID', userId, { Stamps: next });
+    return Object.assign({}, user, { Stamps: next });
+  }
+  return user;
+}
+function userByPhone_(phone) { return phone ? rows_('Users').filter(function (row) { return phone_(row.Phone) === phone; })[0] || null : null; }
+
 function login_(request) {
   const phone = phone_(request.phone);
   if (!phone) throw new Error('กรุณาระบุเบอร์โทรศัพท์');
   if (!/^0\d{8,9}$/.test(phone)) throw new Error('เบอร์โทรศัพท์ไม่ถูกต้อง');
-  const existing = rows_('Users').filter(function (row) { return phone_(row.Phone) === phone; })[0];
-  if (existing) {
-    if (request.pin && String(existing.PIN) !== String(request.pin)) throw new Error('PIN ไม่ถูกต้อง');
-    if (request.register && !String(existing.PIN)) updateRow_('Users', 'ID', existing.ID, { PIN: request.pin || '' });
-    const firstOrder = ordersByUser_(existing.ID).length === 0;
-    return Object.assign({}, existing, { Phone: phone, IsFirstOrder: firstOrder, SessionToken: session_(existing) });
+  let existing = userByPhone_(phone);
+  if (!existing && request.register) {
+    existing = { ID: 'U' + Date.now(), Phone: phone, PIN: '', Name: request.name || 'ลูกค้าทั่วไป', ProfilePic: '', Role: 'Customer', Stamps: 0, CreatedAt: new Date() };
+    append_('Users', existing);
   }
-  if (!request.register) throw new Error('ยังไม่มีบัญชีนี้ กรุณาสมัครสมาชิก');
-  const user = { ID: 'U' + Date.now(), Phone: phone, PIN: request.pin || '', Name: request.name || 'ลูกค้า DinoEater', ProfilePic: '', Role: 'Customer', Stamps: 0, CreatedAt: new Date() };
-  append_('Users', user);
-  return Object.assign({}, user, { IsFirstOrder: true, SessionToken: session_(user) });
+  if (!existing) return { exists: false, Phone: phone };
+  const user = syncStamps_(phone, existing.ID);
+  const firstOrder = ordersByUser_(existing.ID).length === 0;
+  return Object.assign({}, user, { Phone: phone, IsFirstOrder: firstOrder, exists: true, SessionToken: session_(user) });
 }
 function updateProfile_(request) {
   const phone = phone_(request.phone);
@@ -198,6 +234,15 @@ function getOrders_(request) {
   requireAdmin_(request.sessionToken);
   return rows_('Orders').sort(function (a, b) { return String(b.CreatedAt).localeCompare(String(a.CreatedAt)); }).slice(0, 100);
 }
+function getCustomerOrders_(request) {
+  const phone = phone_(request.phone);
+  if (!/^0\d{8,9}$/.test(phone)) throw new Error('เบอร์โทรศัพท์ไม่ถูกต้อง');
+  const items = rows_('OrderItems');
+  return rows_('Orders').filter(function (order) { return phone_(order.Phone) === phone; })
+    .sort(function (a, b) { return String(b.CreatedAt).localeCompare(String(a.CreatedAt)); })
+    .slice(0, 50)
+    .map(function (order) { return Object.assign({}, order, { items: items.filter(function (item) { return String(item.OrderID) === String(order.OrderID); }) }); });
+}
 function createOrder_(request) {
   if (!request.order || !request.items || !request.items.length) throw new Error('ข้อมูลออเดอร์ไม่ครบ');
   const settings = settings_();
@@ -207,13 +252,16 @@ function createOrder_(request) {
   try {
     const o = request.order;
     const id = 'DE' + Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyyMMddHHmmss') + Math.floor(Math.random() * 100);
-    const redeem = o.redeemStamps && o.userId ? prepareStampRedemption_(o.userId, id) : null;
+    const phone = phone_(o.phone);
+    let userId = o.userId || '';
+    if (!userId && phone) { const match = userByPhone_(phone); if (match) userId = match.ID; }
+    const redeem = o.redeemStamps && userId ? prepareStampRedemption_(userId, id) : null;
     const slip = o.slipBase64 ? uploadBase64_(o.slipBase64, 'slip-' + id + '.jpg') : '';
     const order = {
-      OrderID: id, UserID: o.userId || '', Phone: phone_(o.phone), OrderType: o.orderType, AddressDetail: o.addressDetail || '',
+      OrderID: id, UserID: userId, Phone: phone, OrderType: o.orderType, AddressDetail: o.addressDetail || '',
       Lat: o.lat || '', Lng: o.lng || '', Distance: number_(o.distance), DeliveryFee: number_(o.deliveryFee),
       PaymentMethod: o.paymentMethod, SubTotal: number_(o.subTotal), Discount: number_(o.discount), Total: number_(o.total),
-      Status: 'Pending', SlipURL: slip, EstimatedTime: number_(o.estimatedTime) || number_(settings.PrepMinutes), CreatedAt: new Date(), CompletedAt: ''
+      Status: 'Pending', SlipURL: slip, EstimatedTime: number_(o.estimatedTime) || number_(settings.PrepMinutes), CreatedAt: new Date(), CompletedAt: '', StampEarned: ''
     };
     append_('Orders', order);
     request.items.forEach(function (item) { append_('OrderItems', { ID: 'OI' + Utilities.getUuid(), OrderID: id, MenuID: item.menuId, Quantity: number_(item.quantity), Price: number_(item.price) }); });
@@ -242,11 +290,13 @@ function updateStatus_(request) {
   if (request.estimatedTime) changes.EstimatedTime = number_(request.estimatedTime);
   if (request.status === 'Completed') {
     changes.CompletedAt = new Date();
-    if (order.UserID) {
-      const user = rows_('Users').filter(function (row) { return String(row.ID) === String(order.UserID); })[0];
+    let userId = order.UserID;
+    if (!userId && phone_(order.Phone)) { const match = userByPhone_(phone_(order.Phone)); if (match) { userId = match.ID; changes.UserID = match.ID; } }
+    if (userId && String(order.StampEarned).toUpperCase() !== 'TRUE') {
+      const user = rows_('Users').filter(function (row) { return String(row.ID) === String(userId); })[0];
       if (user) {
-        const earned = Math.floor(number_(order.Total) / number_(settings_().StampSpendAmount));
-        updateRow_('Users', 'ID', user.ID, { Stamps: number_(user.Stamps) + earned });
+        updateRow_('Users', 'ID', user.ID, { Stamps: number_(user.Stamps) + stampEarned_(order.Total, settings_()) });
+        changes.StampEarned = 'TRUE';
       }
     }
   }

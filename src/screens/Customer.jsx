@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { api, baht, compressImage, deliveryFeeFor, distanceKm, num, promoOf, storeDirectionsUrl } from '../api'
+import { api, baht, compressImage, deliveryFeeFor, distanceKm, fmtTime, num, promoOf, storeDirectionsUrl } from '../api'
 import { ChatRoom, Empty, Field, MapPicker, Receipt, StatusBadge, StoreMap } from '../components'
 
 export function MenuScreen({ menu, addItem, onLightbox, onProfile, onStore, user, store }) {
@@ -99,10 +99,22 @@ export function CheckoutScreen({ cart, user, store, onOrderCreated, onStoreChang
   })
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const [member, setMember] = useState(user || null)
+  const [checked, setChecked] = useState(false)
   const subtotal = cart.reduce((sum, item) => sum + num(item.Price) * item.quantity, 0)
   const distance = form.point ? distanceKm(settings, form.point) : 0
   const deliveryFee = form.orderType === 'Delivery' ? deliveryFeeFor(settings, subtotal, distance) : 0
   const promos = store.promotions || []
+
+  async function checkPhone() {
+    const phone = String(form.phone).trim()
+    if (!phone) { setMember(null); setChecked(false); return }
+    try {
+      const data = await api('login', { phone })
+      setMember(data.exists ? data : null)
+      setChecked(true)
+    } catch { setMember(null); setChecked(false) }
+  }
 
   function freeItemValue(promo) {
     if (!promo || !promo.FreeMenuID) return 0
@@ -111,18 +123,20 @@ export function CheckoutScreen({ cart, user, store, onOrderCreated, onStoreChang
   }
   const lines = []
   const memberPromo = promoOf(promos, 'NewMember')
-  if (user?.IsFirstOrder && memberPromo) lines.push({ label: `สมาชิกใหม่: ${memberPromo.PromoType}`, value: num(memberPromo.DiscountValue) + freeItemValue(memberPromo) })
+  if ((user?.IsFirstOrder || (checked && member?.IsFirstOrder)) && memberPromo) lines.push({ label: `สมาชิกใหม่: ${memberPromo.PromoType}`, value: num(memberPromo.DiscountValue) + freeItemValue(memberPromo) })
   const bankPromo = promoOf(promos, 'MobileBanking')
   if (form.paymentMethod === 'Transfer' && bankPromo) lines.push({ label: 'ส่วนลดโอนเงิน', value: num(bankPromo.DiscountValue) + freeItemValue(bankPromo) })
   const reward = promoOf(promos, 'StampReward')
-  const canRedeem = !!user && !!reward && num(user.Stamps) >= num(reward.Condition)
+  const stampUser = user || member
+  const canRedeem = !!stampUser && !!reward && num(stampUser.Stamps) >= num(reward.Condition)
   if (form.redeem && canRedeem) lines.push({ label: `แลก ${num(reward.Condition)} แสตมป์`, value: num(reward.DiscountValue) + freeItemValue(reward) })
   const discount = Math.min(subtotal + deliveryFee, lines.reduce((sum, line) => sum + line.value, 0))
   const total = Math.max(0, subtotal + deliveryFee - discount)
 
   async function submit() {
     setError('')
-    if (!form.phone.trim()) return setError('กรุณากรอกเบอร์โทรศัพท์')
+    const digits = String(form.phone).replace(/\D/g, '')
+    if (digits && !/^0\d{8,9}$/.test(digits)) return setError('เบอร์โทรศัพท์ไม่ถูกต้อง หรือเว้นว่างเพื่อสั่งแบบไม่ระบุเบอร์')
     if (form.orderType === 'Delivery' && !form.address.trim()) return setError('กรุณาระบุที่อยู่จัดส่ง')
     if (form.paymentMethod === 'Transfer' && !form.slip) return setError('กรุณาอัปโหลดสลิปโอนเงิน')
     setBusy(true)
@@ -130,7 +144,7 @@ export function CheckoutScreen({ cart, user, store, onOrderCreated, onStoreChang
       const order = await api('createOrder', {
         order: {
           userId: user?.ID || '',
-          phone: form.phone,
+          phone: digits,
           orderType: form.orderType,
           addressDetail: form.address,
           lat: form.point?.lat || '',
@@ -148,7 +162,7 @@ export function CheckoutScreen({ cart, user, store, onOrderCreated, onStoreChang
         items: cart.map(item => ({ menuId: item.ID, quantity: item.quantity, price: item.Price }))
       })
       if (user) {
-        try { const fresh = await api('login', { phone: form.phone, pin: '', register: false }); onStoreChange(null, fresh) } catch { /* ignore refresh */ }
+        try { const fresh = await api('login', { phone: digits || user.Phone }); if (fresh.exists) onStoreChange(null, fresh) } catch { /* ignore refresh */ }
       }
       onOrderCreated(order)
     } catch (submitError) { setError(submitError.message) } finally { setBusy(false) }
@@ -156,8 +170,10 @@ export function CheckoutScreen({ cart, user, store, onOrderCreated, onStoreChang
 
   return <section className="page">
     <h1>ยืนยันการสั่งซื้อ</h1>
-    <Field label="เบอร์โทรศัพท์"><input value={form.phone} inputMode="tel" onChange={event => setForm({ ...form, phone: event.target.value })} placeholder="08x-xxx-xxxx" /></Field>
-    {!user && <p className="hint">ยังไม่เป็นสมาชิกก็สั่งได้ ใส่เบอร์โทรเพื่อให้ร้านติดต่อกลับ</p>}
+    <Field label="เบอร์โทรศัพท์ (ไม่บังคับ)" hint={member ? `สมาชิก: ${member.Name} · ${num(member.Stamps)} แสตมป์` : 'ไม่กรอกก็ได้ จะเป็นลูกค้าทั่วไป (สะสมแสตมป์ไม่ได้)'}>
+      <input value={form.phone} inputMode="tel" onBlur={checkPhone} onChange={event => setForm({ ...form, phone: event.target.value })} placeholder="08x-xxx-xxxx" />
+    </Field>
+    {checked && !member && <p className="hint">ยังไม่เป็นสมาชิก — หลังสั่งซื้อ ระบบจะให้ลงทะเบียนเพื่อสะสมแสตมป์ได้</p>}
     <div className="choice">
       <button className={form.orderType === 'Pickup' ? 'selected' : ''} onClick={() => setForm({ ...form, orderType: 'Pickup' })}>รับหน้าร้าน</button>
       <button className={form.orderType === 'Delivery' ? 'selected' : ''} onClick={() => setForm({ ...form, orderType: 'Delivery' })}>ให้ร้านไปส่ง</button>
@@ -165,6 +181,7 @@ export function CheckoutScreen({ cart, user, store, onOrderCreated, onStoreChang
     {form.orderType === 'Delivery' && <>
       <Field label="รายละเอียดที่อยู่"><input value={form.address} onChange={event => setForm({ ...form, address: event.target.value })} placeholder="บ้านเลขที่ / จุดสังเกต" /></Field>
       <MapPicker store={settings} value={form.point} onChange={point => setForm({ ...form, point })} />
+      {!form.phone.trim() && <p className="hint">ยังไม่ให้เบอร์ติดต่อ — ร้านจะติดต่อกลับไม่ได้หากมีปัญหาในการส่ง</p>}
       <p className="hint">ค่าส่ง {num(settings.DeliveryFeePerKm)} บาท/กม. หลังจาก {num(settings.FreeDeliveryDistanceKm)} กม. แรก · สั่งครบ {baht(settings.FreeDeliveryMinimum)} ส่งฟรี</p>
     </>}
     <div className="choice">
@@ -178,7 +195,7 @@ export function CheckoutScreen({ cart, user, store, onOrderCreated, onStoreChang
       </Field>
       {form.slip && <img className="preview" src={form.slip} alt="slip" />}
     </>}
-    {canRedeem && <label className="checkline"><input type="checkbox" checked={form.redeem} onChange={event => setForm({ ...form, redeem: event.target.checked })} /><span>ใช้ {num(reward.Condition)} แสตมป์แลกส่วนลด {baht(reward.DiscountValue)} (มี {num(user.Stamps)} แสตมป์)</span></label>}
+    {canRedeem && <label className="checkline"><input type="checkbox" checked={form.redeem} onChange={event => setForm({ ...form, redeem: event.target.checked })} /><span>ใช้ {num(reward.Condition)} แสตมป์แลกส่วนลด {baht(reward.DiscountValue)} (มี {num(stampUser.Stamps)} แสตมป์)</span></label>}
     <div className="cart-list">
       {cart.map(item => <div className="cart-row" key={item.ID}><div className="emoji">🍢</div><div><b>{item.Name}</b><small>{item.quantity} × {baht(item.Price)}</small></div><b>{baht(num(item.Price) * item.quantity)}</b></div>)}
     </div>
@@ -188,24 +205,30 @@ export function CheckoutScreen({ cart, user, store, onOrderCreated, onStoreChang
   </section>
 }
 
-export function ProfileScreen({ user, onUser, onBack, store }) {
+export function ProfileScreen({ user, onUser, onBack, store, onReorder }) {
   const [phone, setPhone] = useState(user?.Phone || '')
   const [name, setName] = useState(user?.Name || '')
-  const [pin, setPin] = useState('')
   const [register, setRegister] = useState(false)
   const [error, setError] = useState('')
+  const [history, setHistory] = useState([])
+  const [expanded, setExpanded] = useState('')
   const stampIcon = store.settings?.StampIcon
+
+  useEffect(() => {
+    if (!user) return
+    api('getCustomerOrders', { phone: user.Phone }).then(setHistory).catch(() => setHistory([]))
+  }, [user?.ID, user?.Phone])
 
   async function login() {
     setError('')
+    const digits = String(phone).replace(/\D/g, '')
+    if (!/^0\d{8,9}$/.test(digits)) return setError('กรุณากรอกเบอร์โทรศัพท์ให้ถูกต้อง')
     try {
-      const data = await api('login', { phone, pin, name, register })
+      const data = await api('login', { phone: digits, name, register })
+      if (data.exists === false) { setRegister(true); setError('ยังไม่มีบัญชีนี้ กรุณาสมัครสมาชิก'); return }
       onUser(data)
       onBack()
-    } catch (loginError) {
-      if (loginError.message.includes('ยังไม่มีบัญชี')) setRegister(true)
-      setError(loginError.message)
-    }
+    } catch (loginError) { setError(loginError.message) }
   }
   async function saveProfile() {
     try { const data = await api('updateProfile', { phone: user.Phone, name }); onUser({ ...user, ...data }); setError('บันทึกแล้ว') } catch (profileError) { setError(profileError.message) }
@@ -218,14 +241,11 @@ export function ProfileScreen({ user, onUser, onBack, store }) {
   if (!user) return <section className="page">
     <h1>{register ? 'สมัครสมาชิก DinoEater' : 'เข้าสู่ระบบสมาชิก'}</h1>
     <Field label="เบอร์โทรศัพท์"><input value={phone} inputMode="tel" onChange={event => setPhone(event.target.value)} placeholder="08x-xxx-xxxx" /></Field>
-    {register && <Field label="ชื่อที่แสดง"><input value={name} onChange={event => setName(event.target.value)} placeholder="ชื่อเล่นของคุณ" /></Field>}
-    <Field label="PIN 4-6 หลัก" hint={register ? 'ตั้ง PIN สำหรับเข้าใช้งานครั้งต่อไป' : 'สมาชิกใหม่กดสมัครด้านล่าง'}>
-      <input type="password" inputMode="numeric" value={pin} onChange={event => setPin(event.target.value)} />
-    </Field>
+    {register && <Field label="ชื่อ (ไม่บังคับ)" hint="ชื่อจริงหรือชื่อเล่นก็ได้"><input value={name} onChange={event => setName(event.target.value)} placeholder="ชื่อของคุณ" /></Field>}
     {error && <p className="hint error">{error}</p>}
     <button className="primary" onClick={login}>{register ? 'สมัครสมาชิก' : 'เข้าสู่ระบบ'}</button>
     <button className="ghost" onClick={() => { setRegister(!register); setError('') }}>{register ? 'มีบัญชีแล้ว เข้าสู่ระบบ' : 'ยังไม่มีบัญชี? สมัครสมาชิก'}</button>
-    <p className="hint">ใช้เบอร์โทร + PIN แทน OTP ช่วยลดค่าใช้จ่าย และข้อมูลซิงค์ข้ามอุปกรณ์</p>
+    <p className="hint">ใช้เบอร์โทรเข้าใช้งาน ไม่ต้องใช้ PIN · สะสมแสตมป์และดูประวัติการซื้อได้ทุกอุปกรณ์</p>
   </section>
 
   return <section className="page">
@@ -238,19 +258,68 @@ export function ProfileScreen({ user, onUser, onBack, store }) {
         <small>บทบาท: {user.Role}</small>
       </div>
     </div>
-    <Field label="เปลี่ยนชื่อ"><input value={name} onChange={event => setName(event.target.value)} /></Field>
-    <button className="secondary" onClick={saveProfile}>บันทึกชื่อ</button>
-    <Field label="รูปโปรไฟล์"><input type="file" accept="image/*" onChange={event => savePicture(event.target.files[0])} /></Field>
     <div className="stamp-card">
       {stampIcon ? <img src={stampIcon} alt="stamp" /> : <span className="stamp-emoji">⭐</span>}
       <div><b>{num(user.Stamps)} แสตมป์</b><small>ซื้อครบ {baht(store.settings?.StampSpendAmount)} = 1 แสตมป์</small></div>
     </div>
+    <h2>ประวัติการซื้อ</h2>
+    {!history.length && <p className="hint">ยังไม่มีประวัติการซื้อ</p>}
+    {history.map(order => <article className="order-card" key={order.OrderID}>
+      <div className="row-between"><b>{fmtTime(order.CreatedAt)}</b><StatusBadge status={order.Status} /></div>
+      <small>ยอด {baht(order.Total)} · {(order.items || []).length} รายการ</small>
+      <button className="ghost compact" onClick={() => setExpanded(expanded === order.OrderID ? '' : order.OrderID)}>{expanded === order.OrderID ? 'ซ่อนรายการ' : 'ดูรายการ'}</button>
+      {expanded === order.OrderID && <>
+        <div className="receipt">
+          {(order.items || []).map(item => <div key={item.ID}><span>{menuName(store.menu, item.MenuID)} × {item.Quantity}</span><b>{baht(num(item.Price) * num(item.Quantity))}</b></div>)}
+        </div>
+        <button className="primary" onClick={() => onReorder(order)}>สั่งซื้ออีกครั้ง</button>
+      </>}
+    </article>)}
+    <h2>ตั้งค่าโปรไฟล์</h2>
+    <Field label="เปลี่ยนชื่อ"><input value={name} onChange={event => setName(event.target.value)} placeholder="ชื่อของคุณ" /></Field>
+    <button className="secondary" onClick={saveProfile}>บันทึกชื่อ</button>
+    <Field label="รูปโปรไฟล์"><input type="file" accept="image/*" onChange={event => savePicture(event.target.files[0])} /></Field>
     {error && <p className="hint">{error}</p>}
     <button className="ghost" onClick={logout}>ออกจากระบบ</button>
   </section>
 }
 
-export function OrderStatusScreen({ order, store, user, onOpenChat, chatOpen, chat, onChat, onSend, onResolve, onMenu }) {
+function menuName(menu, menuId) {
+  const item = (menu || []).find(row => String(row.ID) === String(menuId))
+  return item ? item.Name : menuId
+}
+
+function RegisterAfterOrder({ order, onRegistered }) {
+  const [phone, setPhone] = useState(order.Phone ? String(order.Phone) : '')
+  const [name, setName] = useState('')
+  const [done, setDone] = useState(false)
+  const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  async function submit() {
+    setError('')
+    const digits = String(phone).replace(/\D/g, '')
+    if (!/^0\d{8,9}$/.test(digits)) return setError('กรุณากรอกเบอร์โทรศัพท์ให้ถูกต้อง')
+    setBusy(true)
+    try {
+      const registered = await api('login', { phone: digits, register: true, name })
+      setDone(true)
+      onRegistered(registered)
+    } catch (registerError) { setError(registerError.message) } finally { setBusy(false) }
+  }
+
+  if (done) return <div className="card"><b>ลงทะเบียนสำเร็จ 🎉</b><p className="hint">ดูแสตมป์และประวัติการซื้อได้ที่เมนู "บัญชี"</p></div>
+  return <div className="card">
+    <b>ยังไม่เป็นสมาชิก?</b>
+    <p className="hint">ลงทะเบียนเพื่อสะสมแสตมป์และดูประวัติการซื้อ (กรอกแค่เบอร์ และชื่อถ้าต้องการ)</p>
+    <Field label="เบอร์โทรศัพท์"><input value={phone} inputMode="tel" onChange={event => setPhone(event.target.value)} placeholder="08x-xxx-xxxx" /></Field>
+    <Field label="ชื่อ (ไม่บังคับ)"><input value={name} onChange={event => setName(event.target.value)} placeholder="ชื่อจริงหรือชื่อเล่น" /></Field>
+    {error && <p className="hint error">{error}</p>}
+    <button className="primary" disabled={busy} onClick={submit}>{busy ? 'กำลังลงทะเบียน...' : 'ลงทะเบียน'}</button>
+  </div>
+}
+
+export function OrderStatusScreen({ order, store, user, onOpenChat, chatOpen, chat, onChat, onSend, onResolve, onMenu, onRegistered }) {
   if (!order) return <section className="page"><Empty text="ยังไม่มีออเดอร์ล่าสุด" action="สั่งอาหาร" onAction={onMenu} /></section>
   const settings = store.settings || {}
   const steps = ['Pending', 'Accepted', 'Ready', 'Completed']
@@ -281,6 +350,7 @@ export function OrderStatusScreen({ order, store, user, onOpenChat, chatOpen, ch
     {order.SlipURL && <p className="hint">สลิปที่แนบ: <a href={order.SlipURL} target="_blank" rel="noreferrer">ดูสลิป</a></p>}
     {order.OrderType === 'Pickup' && storeDirectionsUrl(settings) && <button className="secondary" onClick={() => window.open(storeDirectionsUrl(settings), '_blank')}>🧭 นำทางไปรับที่ร้าน</button>}
     {canReport && !chatOpen && <button className="secondary" onClick={() => onOpenChat(order, 'รายงานปัญหา: ')}>⚠️ รายงานปัญหา (ภายใน {disputeMinutes} นาที)</button>}
+    {!order.UserID && !user && <RegisterAfterOrder order={order} onRegistered={onRegistered} />}
     {chatOpen && <ChatRoom chat={chat} send={onSend} phone={user?.Phone || order.Phone} onResolve={onResolve} canResolve={false} />}
     {!chatOpen && <button className="primary" onClick={onMenu}>กลับสู่เมนู</button>}
   </section>

@@ -64,6 +64,25 @@ export default function App() {
   function updateQuantity(id, quantity) {
     setCart(current => quantity < 1 ? current.filter(row => row.ID !== id) : current.map(row => row.ID === id ? { ...row, quantity } : row))
   }
+  function reorder(order) {
+    const lines = (order.items || []).map(item => store.menu.find(menuItem => String(menuItem.ID) === String(item.MenuID))).filter(Boolean)
+    if (!lines.length) { setNotice('เมนูในอดีตไม่พร้อมจำหน่ายแล้ว'); return }
+    setCart(current => {
+      let next = current.slice()
+      lines.forEach(line => {
+        const found = next.find(row => row.ID === line.ID)
+        next = found ? next.map(row => row.ID === line.ID ? { ...row, quantity: row.quantity + 1 } : row) : next.concat([{ ...line, quantity: 1 }])
+      })
+      return next
+    })
+    setNotice('เพิ่มรายการเดิมลงตะกร้าแล้ว')
+    setScreen('cart')
+  }
+  function handleRegistered(registered) {
+    setUser(registered)
+    if (order?.OrderID) api('getOrder', { orderId: order.OrderID }).then(setOrder).catch(() => {})
+    setNotice('ลงทะเบียนสำเร็จ เริ่มสะสมแสตมป์ได้แล้ว')
+  }
   const cartCount = cart.reduce((sum, item) => sum + item.quantity, 0)
 
   async function openChat(target) {
@@ -93,8 +112,8 @@ export default function App() {
     {screen === 'store' && <StoreScreen store={store} user={user} onProfile={logoutOrLogin} />}
     {screen === 'cart' && <CartScreen cart={cart} updateQuantity={updateQuantity} onCheckout={() => setScreen('checkout')} onContinue={() => setScreen('menu')} />}
     {screen === 'checkout' && <CheckoutScreen cart={cart} user={user} store={store} onStoreChange={(_, nextUser) => nextUser && setUser({ ...user, ...nextUser })} onOrderCreated={created => { setCart([]); setChatOpen(false); previousStatus.current = created.Status; setOrder(created); setScreen('order') }} />}
-    {screen === 'profile' && <ProfileScreen user={user} onUser={setUser} onBack={() => setScreen('menu')} store={store} />}
-    {screen === 'order' && <OrderStatusScreen order={order} store={store} user={user} chatOpen={chatOpen} chat={chat} onOpenChat={openChat} onSend={sendChat} onMenu={() => { setChatOpen(false); setScreen('menu') }} />}
+    {screen === 'profile' && <ProfileScreen user={user} onUser={setUser} onBack={() => setScreen('menu')} store={store} onReorder={reorder} />}
+    {screen === 'order' && <OrderStatusScreen order={order} store={store} user={user} chatOpen={chatOpen} chat={chat} onOpenChat={openChat} onSend={sendChat} onMenu={() => { setChatOpen(false); setScreen('menu') }} onRegistered={handleRegistered} />}
     {screen === 'admin' && <AdminScreen store={store} reloadStore={loadStore} user={user} requireLogin={() => setScreen('profile')} />}
 
     <nav>
