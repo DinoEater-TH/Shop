@@ -107,7 +107,7 @@ export function compressImage(file, maxSize = 1280, quality = 0.8) {
         canvas.width = width
         canvas.height = height
         canvas.getContext('2d').drawImage(image, 0, 0, width, height)
-        resolve(canvas.toDataURL('image/jpeg', quality))
+        resolve(canvas.toDataURL('image/webp', quality))
       }
       image.onerror = () => reject(new Error('อ่านรูปไม่สำเร็จ'))
       image.src = reader.result

@@ -615,7 +615,8 @@ function uploadBase64_(dataUrl, filename) {
   const matches = String(dataUrl).match(/^data:(.+);base64,(.+)$/);
   if (!matches) throw new Error('รูปแบบไฟล์ไม่ถูกต้อง');
   const folder = getFolder_();
-  const blob = Utilities.newBlob(Utilities.base64Decode(matches[2]), matches[1], filename);
+  const mime = String(matches[1]).toLowerCase() === 'image/webp' ? 'image/webp' : 'image/webp';
+  const blob = Utilities.newBlob(Utilities.base64Decode(matches[2]), 'image/webp', filename.replace(/\.[^.]+$/, '.webp'));
   const file = folder.createFile(blob);
   file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
   const thumbnailSize = 1600;
