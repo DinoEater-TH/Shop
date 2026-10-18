@@ -26,6 +26,16 @@ export function Field({ label, hint, children }) {
 
 export function Lightbox({ list, index, onStep, onClose, onAdd, menu }) {
   const startX = useRef(0)
+  const [justAdded, setJustAdded] = useState('')
+  const timer = useRef(null)
+  useEffect(() => () => clearTimeout(timer.current), [])
+  function addToCart(item) {
+    if (!item || !onAdd) return
+    onAdd(item)
+    setJustAdded(item.Name)
+    clearTimeout(timer.current)
+    timer.current = setTimeout(() => setJustAdded(''), 1600)
+  }
   if (!list || !list.length) return null
   const current = list[index] || list[0]
   const many = list.length > 1
@@ -37,13 +47,16 @@ export function Lightbox({ list, index, onStep, onClose, onAdd, menu }) {
     {many && <button className="lightbox-nav prev" aria-label="ก่อนหน้า" onClick={event => { event.stopPropagation(); onStep(-1) }}>‹</button>}
     <img className="lightbox-image" src={current.src} alt={current.title || ''} onClick={e => e.stopPropagation()} />
     {many && <button className="lightbox-nav next" aria-label="ถัดไป" onClick={event => { event.stopPropagation(); onStep(1) }}>›</button>}
+    {justAdded && <div className="lightbox-toast" onClick={e => e.stopPropagation()}>✓ เพิ่มลงตระกร้าแล้ว</div>}
     <div className="lightbox-info" onClick={e => e.stopPropagation()}>
       <div className="lightbox-text">
         <b>{current.title}</b>
         {item && <small>{item.Description}</small>}
         {item && <b className="lightbox-price">{baht(item.Price)}</b>}
       </div>
-      <button className="lightbox-add" onClick={() => { if (item && onAdd) onAdd(item) }}>+ เพิ่มลงตระกร้า</button>
+      <button className={`lightbox-add${justAdded === current.title ? ' added' : ''}`} onClick={() => addToCart(item)} disabled={!item}>
+        {justAdded === current.title ? '✓ เพิ่มแล้ว' : '+ เพิ่มลงตระกร้า'}
+      </button>
     </div>
   </div>
 }

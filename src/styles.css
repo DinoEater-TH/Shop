@@ -161,6 +161,14 @@ input[type=checkbox]{width:auto}
 .lightbox-price{color:#d84315;font-size:16px}
 .lightbox-add{flex:0 0 auto;border:0;border-radius:11px;background:#d84315;color:#fff;font-family:inherit;font-size:14px;font-weight:600;padding:11px 13px;cursor:pointer;white-space:nowrap}
 .lightbox-add:active{transform:scale(0.96)}
+.lightbox-add.added{background:#2e7d32}
+.lightbox-toast{position:absolute;top:14px;left:50%;transform:translateX(-50%);z-index:4;background:#2e7d32;color:#fff;border-radius:999px;padding:9px 16px;font-size:14px;font-weight:600;box-shadow:0 4px 16px #0007;animation:toastIn 1.6s ease forwards}
+@keyframes toastIn{
+  0%{opacity:0;transform:translateX(-50%) translateY(-12px)}
+  12%{opacity:1;transform:translateX(-50%) translateY(0)}
+  80%{opacity:1;transform:translateX(-50%) translateY(0)}
+  100%{opacity:0;transform:translateX(-50%) translateY(-12px)}
+}
 .hint.error{color:#c0392b}
 .badge-outfordelivery{background:#d6e8ff;color:#1c4f8a}
 .queue-line{display:block;color:#b8451f;font-weight:600}
