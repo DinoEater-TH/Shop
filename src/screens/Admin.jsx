@@ -124,6 +124,8 @@ function AdminOrders({ token, store }) {
       <b>{order.OrderID}</b>
       <span>{order.OrderType === 'Delivery' ? 'จัดส่ง' : 'รับเอง'} · {order.PaymentMethod === 'Transfer' ? 'โอน' : 'เงินสด'} · {baht(order.Total)}</span>
       <small>{order.Phone} · {fmtTime(order.CreatedAt)}</small>
+      {(order.items || []).map(item => <small key={item.ID}>• {item.MenuID} × {item.Quantity}</small>)}
+      {orderOptions(order).map(group => <small key={group.groupId}>• {group.groupName}: {group.choices.join(', ')}</small>)}
       {order.queue && (order.Status === 'Pending' || order.Status === 'Accepted') && <small className="queue-line">คิวที่ {order.queue.position} · รออีกประมาณ {order.queue.waitingMinutes} นาที</small>}
       <div className="row-actions">
         <StatusBadge status={order.Status} />
