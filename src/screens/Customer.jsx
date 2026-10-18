@@ -3,7 +3,7 @@ import { api, baht, compressImage, deliveryFeeFor, distanceKm, driveImage, fmtTi
 import { ChatRoom, Empty, Field, MapPicker, QueueTimer, Receipt, StatusBadge, StoreMap } from '../components'
 
 export function MenuScreen({ menu, addItem, onLightbox, onProfile, user }) {
-  const gallery = menu.filter(item => item.ImageURL).map(item => ({ ID: item.ID, src: driveImage(item.ImageURL, 1600), title: item.Name }))
+  const gallery = menu.filter(item => item.ImageURL).map(item => ({ ID: item.ID, id: item.ID, src: driveImage(item.ImageURL, 1600), title: item.Name }))
   return <section>
     <div className="hero">
       <p>ทอดใหม่ทุกออเดอร์</p>

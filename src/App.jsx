@@ -154,6 +154,6 @@ export default function App() {
       {isAdmin(user) && <button onClick={() => setScreen('admin')}>ร้านค้า</button>}
     </nav>
 
-    {lightbox && <Lightbox list={lightbox.list} index={lightbox.index} onStep={delta => setLightbox(current => current ? { ...current, index: (current.index + delta + current.list.length) % current.list.length } : current)} onClose={() => setLightbox(null)} />}
+    {lightbox && <Lightbox list={lightbox.list} index={lightbox.index} onStep={delta => setLightbox(current => current ? { ...current, index: (current.index + delta + current.list.length) % current.list.length } : current)} onClose={() => setLightbox(null)} onAdd={addItem} menu={store.menu} />}
   </div>
 }

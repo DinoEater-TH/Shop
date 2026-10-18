@@ -150,10 +150,17 @@ input[type=checkbox]{width:auto}
 .lightbox{position:fixed;inset:0;background:#000;display:flex;align-items:center;justify-content:center;z-index:20;overflow:hidden;touch-action:none}
 .lightbox-image{width:100vw;height:100vh;height:100dvh;object-fit:contain;display:block}
 .lightbox-title{position:absolute;bottom:0;left:0;right:0;margin:0;padding:14px 18px 22px;color:#fff;text-align:center;font-size:15px;background:linear-gradient(transparent,#000000cc)}
-.lightbox-close{position:absolute;top:14px;right:14px;z-index:2;width:40px;height:40px;border:0;border-radius:50%;background:#ffffff26;color:#fff;font-size:24px;line-height:1;cursor:pointer}
-.lightbox-nav{position:absolute;top:50%;transform:translateY(-50%);z-index:2;width:48px;height:48px;border:0;border-radius:50%;background:#ffffff26;color:#fff;font-size:30px;line-height:1;cursor:pointer}
+.lightbox-close{position:absolute;top:14px;right:14px;z-index:3;width:40px;height:40px;border:0;border-radius:50%;background:#ffffff26;color:#fff;font-size:24px;line-height:1;cursor:pointer}
+.lightbox-nav{position:absolute;top:50%;transform:translateY(-50%);z-index:3;width:48px;height:48px;border:0;border-radius:50%;background:#ffffff26;color:#fff;font-size:30px;line-height:1;cursor:pointer}
 .lightbox-nav.prev{left:12px}
 .lightbox-nav.next{right:12px}
+.lightbox-info{position:absolute;left:12px;right:12px;bottom:12px;z-index:3;display:flex;align-items:center;gap:10px;padding:12px 14px;border-radius:14px;background:#ffffffee;backdrop-filter:blur(6px);box-shadow:0 6px 24px #0006}
+.lightbox-text{flex:1;display:grid;gap:2px;min-width:0}
+.lightbox-text b{color:#29201c;font-size:15px;line-height:1.35}
+.lightbox-text small{color:#806f66;font-size:12.5px;line-height:1.4}
+.lightbox-price{color:#d84315;font-size:16px}
+.lightbox-add{flex:0 0 auto;border:0;border-radius:11px;background:#d84315;color:#fff;font-family:inherit;font-size:14px;font-weight:600;padding:11px 13px;cursor:pointer;white-space:nowrap}
+.lightbox-add:active{transform:scale(0.96)}
 .hint.error{color:#c0392b}
 .badge-outfordelivery{background:#d6e8ff;color:#1c4f8a}
 .queue-line{display:block;color:#b8451f;font-weight:600}

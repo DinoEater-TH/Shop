@@ -3,6 +3,7 @@ import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { api, baht, currentPosition, distanceKm, num, storeCoords, storeDirectionsUrl } from './api'
 
+
 const OSM_URL = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'
 const OSM_ATTR = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
 const DEFAULT_CENTER = { lat: 13.7563, lng: 100.5018 }
@@ -23,19 +24,27 @@ export function Field({ label, hint, children }) {
   return <label className="field"><span>{label}</span>{children}{hint && <small className="hint">{hint}</small>}</label>
 }
 
-export function Lightbox({ list, index, onStep, onClose }) {
+export function Lightbox({ list, index, onStep, onClose, onAdd, menu }) {
   const startX = useRef(0)
   if (!list || !list.length) return null
   const current = list[index] || list[0]
   const many = list.length > 1
+  const item = menu?.find(row => String(row.ID) === String(current.id))
   return <div className="lightbox" onClick={onClose}
     onTouchStart={event => { startX.current = event.touches[0].clientX }}
     onTouchEnd={event => { if (!many) return; const dx = event.changedTouches[0].clientX - startX.current; if (Math.abs(dx) > 40) onStep(dx < 0 ? 1 : -1) }}>
     <button className="lightbox-close" onClick={onClose} aria-label="ปิด">×</button>
     {many && <button className="lightbox-nav prev" aria-label="ก่อนหน้า" onClick={event => { event.stopPropagation(); onStep(-1) }}>‹</button>}
-    <img className="lightbox-image" src={current.src} alt={current.title || ''} />
+    <img className="lightbox-image" src={current.src} alt={current.title || ''} onClick={e => e.stopPropagation()} />
     {many && <button className="lightbox-nav next" aria-label="ถัดไป" onClick={event => { event.stopPropagation(); onStep(1) }}>›</button>}
-    {(current.title || many) && <p className="lightbox-title">{current.title}{many ? ` · ${index + 1}/${list.length}` : ''}</p>}
+    <div className="lightbox-info" onClick={e => e.stopPropagation()}>
+      <div className="lightbox-text">
+        <b>{current.title}</b>
+        {item && <small>{item.Description}</small>}
+        {item && <b className="lightbox-price">{baht(item.Price)}</b>}
+      </div>
+      <button className="lightbox-add" onClick={() => { if (item && onAdd) onAdd(item) }}>+ เพิ่มลงตระกร้า</button>
+    </div>
   </div>
 }
 
