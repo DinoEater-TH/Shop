@@ -385,8 +385,9 @@ function getOrder_(request) {
 }
 function getOrders_(request) {
   requireAdmin_(request.sessionToken);
+  const items = rows_('OrderItems');
   return rows_('Orders').sort(function (a, b) { return String(b.CreatedAt).localeCompare(String(a.CreatedAt)); }).slice(0, 100)
-    .map(function (order) { return Object.assign({}, order, { queue: queueInfo_(order) }); });
+    .map(function (order) { return Object.assign({}, order, { items: items.filter(function (item) { return String(item.OrderID) === String(order.OrderID); }), queue: queueInfo_(order) }); });
 }
 function getCustomerOrders_(request) {
   const phone = phone_(request.phone);
