@@ -1,4 +1,4 @@
-/* DinoEater Google Apps Script API. Deploy as Web App: execute as Me, access Anyone. */
+﻿/* DinoEater Google Apps Script API. Deploy as Web App: execute as Me, access Anyone. */
 const SPREADSHEET_ID = '1nPONvDcRaOL1zBVPGzcz3bYsBM7f8L6QhJF5yhR2s04';
 const DRIVE_FOLDER_NAME = 'DinoEater Uploads';
 const SESSION_SECONDS = 21600;
@@ -618,7 +618,8 @@ function uploadBase64_(dataUrl, filename) {
   const blob = Utilities.newBlob(Utilities.base64Decode(matches[2]), matches[1], filename);
   const file = folder.createFile(blob);
   file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
-  return 'https://drive.google.com/thumbnail?id=' + file.getId() + '&sz=w1000';
+  const thumbnailSize = 1600;
+  return 'https://drive.google.com/thumbnail?id=' + file.getId() + '&sz=w' + thumbnailSize;
 }
 function getFolder_() {
   const folders = DriveApp.getFoldersByName(DRIVE_FOLDER_NAME);
@@ -643,5 +644,6 @@ function useDriveImage_(request) {
   const file = DriveApp.getFileById(id);
   if (file.getMimeType().indexOf('image/') !== 0) throw new Error('ไฟล์ที่เลือกไม่ใช่รูปภาพ');
   file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
-  return 'https://drive.google.com/thumbnail?id=' + file.getId() + '&sz=w1000';
+  return 'https://drive.google.com/thumbnail?id=' + file.getId() + '&sz=w1600';
 }
+

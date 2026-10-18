@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import QRCode from 'qrcode'
-import { api, baht, beep, compressImage, fmtTime, num, orderOptions } from '../api'
+import { api, baht, beep, compressImage, driveImage, fmtTime, num, orderOptions } from '../api'
 import { ChatRoom, Empty, Field, MapPicker, StatusBadge } from '../components'
 
 const TABS = [
@@ -219,7 +219,7 @@ function AdminMenu({ token, reloadStore }) {
   async function pickDrive(fileId) {
     try {
       const url = await api('useDriveImage', { sessionToken: token, fileId })
-      setDraft(current => ({ ...current, ImageURL: url, imageBase64: '' }))
+      setDraft(current => ({ ...current, ImageURL: url.replace('&sz=w1000','&sz=w1600').replace('&sz=w400','&sz=w1600').replace('?sz=w1000','?sz=w1600'), imageBase64: '' }))
       setDriveOpen(false)
     } catch (pickError) { setDriveError(pickError.message) }
   }
@@ -247,10 +247,10 @@ function AdminMenu({ token, reloadStore }) {
       <Field label="ราคา (บาท)"><input type="number" value={draft.Price} onChange={event => setDraft({ ...draft, Price: event.target.value })} /></Field>
       <Field label="จำนวนคงเหลือ" hint="ใส่ Unlimited หากไม่จำกัด"><input value={draft.Stock} onChange={event => setDraft({ ...draft, Stock: event.target.value })} /></Field>
       <Field label="รูปอาหาร">
-        <input type="file" accept="image/*" onChange={event => compressImage(event.target.files[0]).then(imageBase64 => setDraft({ ...draft, imageBase64 }))} />
+        <input type="file" accept="image/*" onChange={event => compressImage(event.target.files[0], 1600, 0.85).then(imageBase64 => setDraft({ ...draft, imageBase64 }))} />
         <button type="button" className="ghost compact" onClick={openDrive}>เลือกจาก Google Drive</button>
       </Field>
-      {(draft.imageBase64 || draft.ImageURL) && <img className="preview" src={draft.imageBase64 || draft.ImageURL} alt="ตัวอย่างรูป" />}
+      {(draft.imageBase64 || draft.ImageURL) && <img className="preview" src={draft.imageBase64 || driveImage(draft.ImageURL, 600)} alt="ตัวอย่างรูป" />}
       <label className="checkline"><input type="checkbox" checked={String(draft.IsActive).toUpperCase() !== 'FALSE'} onChange={event => setDraft({ ...draft, IsActive: event.target.checked ? 'TRUE' : 'FALSE' })} /><span>เปิดขาย</span></label>
       <div className="row-actions"><button className="primary" disabled={busy} onClick={save}>บันทึก</button><button className="ghost" onClick={() => setDraft(null)}>ยกเลิก</button></div>
     </div>}
@@ -267,7 +267,7 @@ function AdminMenu({ token, reloadStore }) {
       </div>
     </div>}
     <div className="menu-grid">{items.map(item => <article className="food-card admin-card" key={item.ID}>
-      <div className="food-image" onClick={() => setDraft({ ...item })}>{item.ImageURL ? <img src={item.ImageURL} alt={item.Name} /> : '🍢'}</div>
+      <div className="food-image" onClick={() => setDraft({ ...item })}>{item.ImageURL ? <img src={driveImage(item.ImageURL, 600)} alt={item.Name} loading="lazy" /> : '🍢'}</div>
       <div className="food-body">
         <h3>{item.Name}</h3>
         <div className="food-foot"><strong>{baht(item.Price)}</strong><span className="stock">{String(item.Stock).toUpperCase() === 'UNLIMITED' ? 'ไม่จำกัด' : `เหลือ ${item.Stock}`}</span></div>

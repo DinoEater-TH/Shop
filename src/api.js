@@ -24,6 +24,13 @@ export function orderOptions(order) {
   } catch { return [] }
 }
 
+export function driveImage(url, width) {
+  if (!url) return url
+  if (url.indexOf('drive.google.com') < 0) return url
+  if (/[?&]sz=w\d+/.test(url)) return url.replace(/sz=w\d+/, `sz=w${width}`)
+  return url + (url.indexOf('?') >= 0 ? '&' : '?') + `sz=w${width}`
+}
+
 export function distanceKm(store, point) {
   if (!store || store.StoreLat === '' || store.StoreLat === undefined || !point) return 0
   const lat1 = num(store.StoreLat), lng1 = num(store.StoreLng), lat2 = num(point.lat), lng2 = num(point.lng)

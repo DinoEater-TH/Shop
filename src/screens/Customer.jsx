@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from 'react'
-import { api, baht, compressImage, deliveryFeeFor, distanceKm, fmtTime, num, orderOptions, promoOf, storeDirectionsUrl } from '../api'
+import { api, baht, compressImage, deliveryFeeFor, distanceKm, driveImage, fmtTime, num, orderOptions, promoOf, storeDirectionsUrl } from '../api'
 import { ChatRoom, Empty, Field, MapPicker, QueueTimer, Receipt, StatusBadge, StoreMap } from '../components'
 
 export function MenuScreen({ menu, addItem, onLightbox, onProfile, user }) {
-  const gallery = menu.filter(item => item.ImageURL).map(item => ({ ID: item.ID, src: item.ImageURL, title: item.Name }))
+  const gallery = menu.filter(item => item.ImageURL).map(item => ({ ID: item.ID, src: driveImage(item.ImageURL, 1600), title: item.Name }))
   return <section>
     <div className="hero">
       <p>ทอดใหม่ทุกออเดอร์</p>
@@ -14,7 +14,7 @@ export function MenuScreen({ menu, addItem, onLightbox, onProfile, user }) {
     <div className="menu-grid">
       {menu.map(item => <article className="food-card" key={item.ID}>
         <div className={`food-image${item.ImageURL ? ' zoomable' : ''}`} onClick={() => { const index = gallery.findIndex(row => String(row.ID) === String(item.ID)); if (index >= 0) onLightbox(gallery, index) }}>
-          {item.ImageURL ? <img src={item.ImageURL} alt={item.Name} /> : '🍢'}
+          {item.ImageURL ? <img src={driveImage(item.ImageURL, 600)} alt={item.Name} loading="lazy" /> : '🍢'}
         </div>
         <div className="food-body">
           <h3>{item.Name}</h3>
@@ -56,7 +56,7 @@ export function CartScreen({ cart, updateQuantity, onCheckout, onContinue }) {
     {!cart.length ? <Empty text="ยังไม่มีรายการในตะกร้า" action="ดูเมนู" onAction={onContinue} /> : <>
       <div className="cart-list">
         {cart.map(item => <div className="cart-row" key={item.ID}>
-          <div className="emoji">{item.ImageURL ? <img src={item.ImageURL} alt={item.Name} /> : '🍢'}</div>
+          <div className="emoji">{item.ImageURL ? <img src={driveImage(item.ImageURL, 200)} alt={item.Name} /> : '🍢'}</div>
           <div><b>{item.Name}</b><small>{baht(item.Price)}</small></div>
           <div className="stepper">
             <button onClick={() => updateQuantity(item.ID, item.quantity - 1)}>-</button>
