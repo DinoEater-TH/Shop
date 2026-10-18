@@ -23,12 +23,19 @@ export function Field({ label, hint, children }) {
   return <label className="field"><span>{label}</span>{children}{hint && <small className="hint">{hint}</small>}</label>
 }
 
-export function Lightbox({ src, title, onClose }) {
-  if (!src) return null
-  return <div className="lightbox" onClick={onClose}>
+export function Lightbox({ list, index, onStep, onClose }) {
+  const startX = useRef(0)
+  if (!list || !list.length) return null
+  const current = list[index] || list[0]
+  const many = list.length > 1
+  return <div className="lightbox" onClick={onClose}
+    onTouchStart={event => { startX.current = event.touches[0].clientX }}
+    onTouchEnd={event => { if (!many) return; const dx = event.changedTouches[0].clientX - startX.current; if (Math.abs(dx) > 40) onStep(dx < 0 ? 1 : -1) }}>
     <button className="lightbox-close" onClick={onClose} aria-label="ปิด">×</button>
-    <img className="lightbox-image" src={src} alt={title || ''} onClick={onClose} />
-    {title && <p className="lightbox-title">{title}</p>}
+    {many && <button className="lightbox-nav prev" aria-label="ก่อนหน้า" onClick={event => { event.stopPropagation(); onStep(-1) }}>‹</button>}
+    <img className="lightbox-image" src={current.src} alt={current.title || ''} />
+    {many && <button className="lightbox-nav next" aria-label="ถัดไป" onClick={event => { event.stopPropagation(); onStep(1) }}>›</button>}
+    {(current.title || many) && <p className="lightbox-title">{current.title}{many ? ` · ${index + 1}/${list.length}` : ''}</p>}
   </div>
 }
 

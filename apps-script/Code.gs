@@ -7,9 +7,11 @@ const TABLES = {
   Settings: ['Key', 'Value'],
   Users: ['ID', 'Phone', 'PIN', 'Name', 'ProfilePic', 'Role', 'Stamps', 'CreatedAt', 'Address', 'Lat', 'Lng'],
   Menu: ['ID', 'Name', 'Description', 'Price', 'ImageURL', 'Stock', 'IsActive'],
-  Orders: ['OrderID', 'UserID', 'Phone', 'OrderType', 'AddressDetail', 'Lat', 'Lng', 'Distance', 'DeliveryFee', 'PaymentMethod', 'SubTotal', 'Discount', 'Total', 'Status', 'SlipURL', 'EstimatedTime', 'CreatedAt', 'CompletedAt', 'StampEarned', 'StartedAt', 'QueuePosition'],
+  Orders: ['OrderID', 'UserID', 'Phone', 'OrderType', 'AddressDetail', 'Lat', 'Lng', 'Distance', 'DeliveryFee', 'PaymentMethod', 'SubTotal', 'Discount', 'Total', 'Status', 'SlipURL', 'EstimatedTime', 'CreatedAt', 'CompletedAt', 'StampEarned', 'StartedAt', 'QueuePosition', 'Options'],
   OrderItems: ['ID', 'OrderID', 'MenuID', 'Quantity', 'Price'],
   Promotions: ['PromoType', 'Condition', 'DiscountValue', 'FreeMenuID', 'IsActive'],
+  OptionGroups: ['GroupID', 'Name', 'Required', 'MultiSelect', 'SortOrder', 'IsActive'],
+  OptionChoices: ['ChoiceID', 'GroupID', 'Label', 'SortOrder', 'IsActive'],
   ChatDisputes: ['ChatID', 'OrderID', 'SenderRole', 'Message', 'Timestamp', 'Status'],
   AuditLogs: ['LogID', 'AdminID', 'ActionType', 'Detail', 'Timestamp']
 };
@@ -57,8 +59,13 @@ function dispatch_(request) {
     if (action === 'getMenu') return ok_(getMenu_(request));
     if (action === 'saveMenu') return ok_(saveMenu_(request));
     if (action === 'deleteMenu') return ok_(deleteMenu_(request));
+    if (action === 'listDriveImages') return ok_(listDriveImages_(request));
+    if (action === 'useDriveImage') return ok_(useDriveImage_(request));
     if (action === 'getPromotions') return ok_(rows_('Promotions'));
     if (action === 'savePromotion') return ok_(savePromotion_(request));
+    if (action === 'getOptionGroups') return ok_(getOptionGroups_(request));
+    if (action === 'saveOptionGroup') return ok_(saveOptionGroup_(request));
+    if (action === 'deleteOptionGroup') return ok_(deleteOptionGroup_(request));
     if (action === 'saveSettings') return ok_(saveSettings_(request));
     if (action === 'getUsers') return ok_(getUsers_(request));
     if (action === 'getMemberDetail') return ok_(getMemberDetail_(request));
@@ -276,10 +283,68 @@ function getStore_() {
   const settings = settings_();
   const menu = rows_('Menu').filter(function (row) { return String(row.IsActive).toUpperCase() !== 'FALSE'; });
   const promos = rows_('Promotions').filter(function (row) { return String(row.IsActive).toUpperCase() !== 'FALSE'; });
-  return { settings: settings, menu: menu, promotions: promos };
+  return { settings: settings, menu: menu, promotions: promos, options: optionGroups_(true) };
 }
 function getMenu_(request) { if (request.sessionToken) requireAdmin_(request.sessionToken); return rows_('Menu'); }
 function getPromotions_() { return rows_('Promotions'); }
+
+/* ---------- option groups (ตัวเลือกเสริม) ---------- */
+function optionGroups_(activeOnly) {
+  let groups = [], choices = [];
+  try { groups = rows_('OptionGroups'); } catch (error) { return []; }
+  try { choices = rows_('OptionChoices'); } catch (error) { choices = []; }
+  return groups
+    .filter(function (group) { return !activeOnly || String(group.IsActive).toUpperCase() !== 'FALSE'; })
+    .sort(function (a, b) { return number_(a.SortOrder) - number_(b.SortOrder); })
+    .map(function (group) {
+      return {
+        GroupID: group.GroupID,
+        Name: group.Name,
+        Required: String(group.Required).toUpperCase() === 'TRUE',
+        MultiSelect: String(group.MultiSelect).toUpperCase() === 'TRUE',
+        IsActive: String(group.IsActive).toUpperCase() !== 'FALSE',
+        SortOrder: number_(group.SortOrder),
+        choices: choices
+          .filter(function (choice) { return String(choice.GroupID) === String(group.GroupID); })
+          .sort(function (a, b) { return number_(a.SortOrder) - number_(b.SortOrder); })
+          .map(function (choice) { return { ChoiceID: choice.ChoiceID, Label: choice.Label }; })
+      };
+    });
+}
+function getOptionGroups_(request) {
+  requireAdmin_(request.sessionToken);
+  return optionGroups_(false);
+}
+function saveOptionGroup_(request) {
+  const admin = requireAdmin_(request.sessionToken);
+  const group = request.group || {};
+  const name = String(group.Name || '').trim();
+  if (!name) throw new Error('กรุณาระบุชื่อตัวเลือกเสริม');
+  const labels = (Array.isArray(request.choices) ? request.choices : []).map(function (label) { return String(label).trim(); }).filter(function (label) { return label; });
+  if (!labels.length) throw new Error('กรุณาเพิ่มตัวเลือกอย่างน้อย 1 อย่าง');
+  const id = group.GroupID || 'OG' + Date.now();
+  const record = {
+    GroupID: id,
+    Name: name,
+    Required: String(group.Required).toLowerCase() === 'true' ? 'TRUE' : 'FALSE',
+    MultiSelect: String(group.MultiSelect).toLowerCase() === 'true' ? 'TRUE' : 'FALSE',
+    SortOrder: group.GroupID ? number_(group.SortOrder) : rows_('OptionGroups').length,
+    IsActive: String(group.IsActive).toLowerCase() === 'false' ? 'FALSE' : 'TRUE'
+  };
+  if (group.GroupID) updateRow_('OptionGroups', 'GroupID', id, record); else append_('OptionGroups', record);
+  rows_('OptionChoices').filter(function (choice) { return String(choice.GroupID) === String(id); }).forEach(function (choice) { deleteRow_('OptionChoices', 'ChoiceID', choice.ChoiceID); });
+  labels.forEach(function (label, index) { append_('OptionChoices', { ChoiceID: 'OC' + Utilities.getUuid(), GroupID: id, Label: label, SortOrder: index, IsActive: 'TRUE' }); });
+  log_(admin.ID, group.GroupID ? 'OPTION_UPDATE' : 'OPTION_CREATE', name);
+  return optionGroups_(false).filter(function (item) { return String(item.GroupID) === String(id); })[0];
+}
+function deleteOptionGroup_(request) {
+  const admin = requireAdmin_(request.sessionToken);
+  const group = find_('OptionGroups', 'GroupID', request.groupId);
+  rows_('OptionChoices').filter(function (choice) { return String(choice.GroupID) === String(group.GroupID); }).forEach(function (choice) { deleteRow_('OptionChoices', 'ChoiceID', choice.ChoiceID); });
+  deleteRow_('OptionGroups', 'GroupID', group.GroupID);
+  log_(admin.ID, 'OPTION_DELETE', String(group.Name));
+  return 'Deleted';
+}
 
 /* ---------- orders ---------- */
 const ACTIVE_STATUSES = ['Pending', 'Accepted'];
@@ -347,11 +412,13 @@ function createOrder_(request) {
     const redeem = o.redeemStamps && userId ? prepareStampRedemption_(userId, id) : null;
     const slip = o.slipBase64 ? uploadBase64_(o.slipBase64, 'slip-' + id + '.jpg') : '';
     const queuePosition = activeOrders_().length + 1;
+    const options = validateOrderOptions_(o.options);
     const order = {
       OrderID: id, UserID: userId, Phone: phone, OrderType: o.orderType, AddressDetail: o.addressDetail || '',
       Lat: o.lat || '', Lng: o.lng || '', Distance: number_(o.distance), DeliveryFee: number_(o.deliveryFee),
       PaymentMethod: o.paymentMethod, SubTotal: number_(o.subTotal), Discount: number_(o.discount), Total: number_(o.total),
-      Status: 'Pending', SlipURL: slip, EstimatedTime: number_(o.estimatedTime) || number_(settings.PrepMinutes), CreatedAt: new Date(), CompletedAt: '', StampEarned: '', StartedAt: '', QueuePosition: queuePosition
+      Status: 'Pending', SlipURL: slip, EstimatedTime: number_(o.estimatedTime) || number_(settings.PrepMinutes), CreatedAt: new Date(), CompletedAt: '', StampEarned: '', StartedAt: '', QueuePosition: queuePosition,
+      Options: options.length ? JSON.stringify(options) : ''
     };
     append_('Orders', order);
     request.items.forEach(function (item) { append_('OrderItems', { ID: 'OI' + Utilities.getUuid(), OrderID: id, MenuID: item.menuId, Quantity: number_(item.quantity), Price: number_(item.price) }); });
@@ -360,6 +427,19 @@ function createOrder_(request) {
   } finally {
     lock.releaseLock();
   }
+}
+function validateOrderOptions_(incoming) {
+  const selections = Array.isArray(incoming) ? incoming : [];
+  const groups = optionGroups_(true);
+  const result = [];
+  groups.forEach(function (group) {
+    const selected = selections.filter(function (item) { return String(item.groupId) === String(group.GroupID); });
+    const labels = selected.length && Array.isArray(selected[0].choices) ? selected[0].choices : [];
+    const chosen = labels.filter(function (label) { return group.choices.some(function (choice) { return String(choice.Label) === String(label); }); });
+    if (group.Required && !chosen.length) throw new Error('กรุณาเลือก "' + group.Name + '"');
+    if (chosen.length) result.push({ groupId: group.GroupID, groupName: group.Name, choices: chosen });
+  });
+  return result;
 }
 function prepareStampRedemption_(userId, orderId) {
   const user = find_('Users', 'ID', userId);
@@ -410,7 +490,7 @@ function saveMenu_(request) {
     Price: number_(item.Price),
     ImageURL: image || item.ImageURL || '',
     Stock: item.Stock === '' || item.Stock === undefined ? 'Unlimited' : item.Stock,
-    IsActive: String(item.IsActive) === 'false' ? 'FALSE' : 'TRUE'
+    IsActive: String(item.IsActive).toLowerCase() === 'false' ? 'FALSE' : 'TRUE'
   };
   if (item.ID) updateRow_('Menu', 'ID', item.ID, record); else append_('Menu', record);
   log_(admin.ID, item.ID ? 'MENU_UPDATE' : 'MENU_CREATE', record.Name);
@@ -542,4 +622,25 @@ function uploadBase64_(dataUrl, filename) {
 function getFolder_() {
   const folders = DriveApp.getFoldersByName(DRIVE_FOLDER_NAME);
   return folders.hasNext() ? folders.next() : DriveApp.createFolder(DRIVE_FOLDER_NAME);
+}
+function listDriveImages_(request) {
+  requireAdmin_(request.sessionToken);
+  const files = getFolder_().getFiles();
+  const images = [];
+  while (files.hasNext() && images.length < 300) {
+    const file = files.next();
+    if (file.getMimeType().indexOf('image/') !== 0) continue;
+    images.push({ id: file.getId(), name: file.getName() });
+  }
+  images.sort(function (a, b) { return a.name < b.name ? -1 : a.name > b.name ? 1 : 0; });
+  return images;
+}
+function useDriveImage_(request) {
+  requireAdmin_(request.sessionToken);
+  const id = String(request.fileId || '');
+  if (!id) throw new Error('ไม่พบไฟล์ที่เลือก');
+  const file = DriveApp.getFileById(id);
+  if (file.getMimeType().indexOf('image/') !== 0) throw new Error('ไฟล์ที่เลือกไม่ใช่รูปภาพ');
+  file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+  return 'https://drive.google.com/thumbnail?id=' + file.getId() + '&sz=w1000';
 }

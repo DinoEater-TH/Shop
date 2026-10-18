@@ -15,6 +15,15 @@ export const promoOf = (promotions, type) => (promotions || []).find(item => Str
 export const isAdmin = user => !!user && ['Admin', 'SuperAdmin'].includes(user.Role)
 export const fmtTime = value => value ? new Date(value).toLocaleString('th-TH', { dateStyle: 'short', timeStyle: 'short' }) : '-'
 
+export function orderOptions(order) {
+  try {
+    const raw = order?.Options
+    if (!raw) return []
+    const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw
+    return Array.isArray(parsed) ? parsed.filter(group => (group.choices || []).length) : []
+  } catch { return [] }
+}
+
 export function distanceKm(store, point) {
   if (!store || store.StoreLat === '' || store.StoreLat === undefined || !point) return 0
   const lat1 = num(store.StoreLat), lng1 = num(store.StoreLng), lat2 = num(point.lat), lng2 = num(point.lng)

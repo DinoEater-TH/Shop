@@ -89,6 +89,20 @@ input[type=checkbox]{width:auto}
 .order-card small{color:#8a786e}
 .admin-card .food-image{cursor:default}
 .checkline{display:flex;align-items:center;gap:8px;font-size:14px;margin:10px 0;font-weight:400}
+.option-group{margin:12px 0}
+.option-head{display:flex;flex-direction:column;gap:2px;margin-bottom:7px}
+.option-head small{color:#8a786e;font-size:12px;font-weight:400}
+.option-choices{display:flex;flex-wrap:wrap;gap:8px}
+.option-choices button{border:1px solid #e8dcd1;border-radius:999px;background:#fff;color:#5c4a41;font-family:inherit;font-size:14px;padding:8px 14px;cursor:pointer}
+.option-choices button.selected{background:#d84315;border-color:#d84315;color:#fff}
+.option-choices-edit{display:grid;gap:8px;margin:10px 0}
+.option-edit-row{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center}
+.option-edit-row input{border:1px solid #e2d6ca;border-radius:10px;padding:9px 11px;font-family:inherit;font-size:15px;width:100%}
+.option-line span{max-width:60%}
+.drive-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;margin:10px 0}
+.drive-item{border:1px solid #f0e6df;border-radius:12px;background:#fff;overflow:hidden;text-align:left;cursor:pointer}
+.drive-item img{width:100%;height:110px;object-fit:cover;display:block}
+.drive-item span{display:block;font-size:12px;padding:6px 8px;color:#5c4a41;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .preview{max-width:150px;border-radius:12px;margin-top:8px}
 .preview.small{max-width:64px}
 .map-picker{margin:10px 0}
@@ -137,6 +151,9 @@ input[type=checkbox]{width:auto}
 .lightbox-image{width:100vw;height:100vh;height:100dvh;object-fit:contain;display:block}
 .lightbox-title{position:absolute;bottom:0;left:0;right:0;margin:0;padding:14px 18px 22px;color:#fff;text-align:center;font-size:15px;background:linear-gradient(transparent,#000000cc)}
 .lightbox-close{position:absolute;top:14px;right:14px;z-index:2;width:40px;height:40px;border:0;border-radius:50%;background:#ffffff26;color:#fff;font-size:24px;line-height:1;cursor:pointer}
+.lightbox-nav{position:absolute;top:50%;transform:translateY(-50%);z-index:2;width:48px;height:48px;border:0;border-radius:50%;background:#ffffff26;color:#fff;font-size:30px;line-height:1;cursor:pointer}
+.lightbox-nav.prev{left:12px}
+.lightbox-nav.next{right:12px}
 .hint.error{color:#c0392b}
 .badge-outfordelivery{background:#d6e8ff;color:#1c4f8a}
 .queue-line{display:block;color:#b8451f;font-weight:600}

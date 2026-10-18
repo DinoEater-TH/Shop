@@ -1,16 +1,17 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import QRCode from 'qrcode'
-import { api, baht, beep, compressImage, fmtTime, num } from '../api'
+import { api, baht, beep, compressImage, fmtTime, num, orderOptions } from '../api'
 import { ChatRoom, Empty, Field, MapPicker, StatusBadge } from '../components'
 
 const TABS = [
   { key: 'orders', label: 'ออเดอร์' },
   { key: 'menu', label: 'เมนู' },
+  { key: 'options', label: 'ตัวเลือกเสริม' },
   { key: 'promos', label: 'โปรโมชัน' },
   { key: 'users', label: 'สมาชิก' },
   { key: 'settings', label: 'ตั้งค่า' },
-  { key: 'logs', label: 'Log' },
-  { key: 'qr', label: 'QR' }
+  { key: 'logs', label: 'บันทึกการทำงาน' },
+  { key: 'qr', label: 'QR code' }
 ]
 
 export default function AdminScreen({ store, reloadStore, user, requireLogin }) {
@@ -28,6 +29,7 @@ export default function AdminScreen({ store, reloadStore, user, requireLogin }) 
     <div className="tabs">{TABS.map(item => <button key={item.key} className={tab === item.key ? 'active' : ''} onClick={() => setTab(item.key)}>{item.label}</button>)}</div>
     {tab === 'orders' && <AdminOrders token={token} store={store} />}
     {tab === 'menu' && <AdminMenu token={token} reloadStore={reloadStore} />}
+    {tab === 'options' && <AdminOptions token={token} />}
     {tab === 'promos' && <AdminPromos store={store} token={token} reloadStore={reloadStore} />}
     {tab === 'users' && <AdminUsers token={token} role={user.Role} />}
     {tab === 'settings' && <AdminSettings store={store} token={token} reloadStore={reloadStore} />}
@@ -171,6 +173,7 @@ function AdminOrderDetail({ order, onClose, onAdvance, onChat }) {
       {order.AddressDetail && <div><span>ที่อยู่</span><b>{order.AddressDetail}</b></div>}
       {num(order.Distance) > 0 && <div><span>ระยะทาง</span><b>{num(order.Distance)} กม.</b></div>}
       {(order.items || []).map(item => <div key={item.ID}><span>{item.MenuID} × {item.Quantity}</span><b>{baht(num(item.Price) * num(item.Quantity))}</b></div>)}
+      {orderOptions(order).map(group => <div className="option-line" key={group.groupId}><span>{group.groupName}</span><b>{group.choices.join(', ')}</b></div>)}
       <div><span>ค่าอาหาร</span><b>{baht(order.SubTotal)}</b></div>
       {num(order.DeliveryFee) > 0 && <div><span>ค่าจัดส่ง</span><b>{baht(order.DeliveryFee)}</b></div>}
       {num(order.Discount) > 0 && <div className="discount-line"><span>ส่วนลด</span><b>-{baht(order.Discount)}</b></div>}
@@ -202,6 +205,23 @@ function AdminMenu({ token, reloadStore }) {
   const load = async () => { try { setItems(await api('getMenu', { sessionToken: token })); setError('') } catch (loadError) { setError(loadError.message) } }
   useEffect(() => { load() }, [token])
 
+  const [driveOpen, setDriveOpen] = useState(false)
+  const [driveImages, setDriveImages] = useState([])
+  const [driveError, setDriveError] = useState('')
+
+  async function openDrive() {
+    setDriveOpen(true)
+    setDriveError('')
+    try { setDriveImages(await api('listDriveImages', { sessionToken: token })) } catch (driveLoadError) { setDriveError(driveLoadError.message) }
+  }
+  async function pickDrive(fileId) {
+    try {
+      const url = await api('useDriveImage', { sessionToken: token, fileId })
+      setDraft(current => ({ ...current, ImageURL: url, imageBase64: '' }))
+      setDriveOpen(false)
+    } catch (pickError) { setDriveError(pickError.message) }
+  }
+
   async function save() {
     setBusy(true)
     try {
@@ -224,9 +244,25 @@ function AdminMenu({ token, reloadStore }) {
       <Field label="รายละเอียด"><input value={draft.Description} onChange={event => setDraft({ ...draft, Description: event.target.value })} /></Field>
       <Field label="ราคา (บาท)"><input type="number" value={draft.Price} onChange={event => setDraft({ ...draft, Price: event.target.value })} /></Field>
       <Field label="จำนวนคงเหลือ" hint="ใส่ Unlimited หากไม่จำกัด"><input value={draft.Stock} onChange={event => setDraft({ ...draft, Stock: event.target.value })} /></Field>
-      <Field label="รูปอาหาร"><input type="file" accept="image/*" onChange={event => compressImage(event.target.files[0]).then(imageBase64 => setDraft({ ...draft, imageBase64 }))} /></Field>
+      <Field label="รูปอาหาร">
+        <input type="file" accept="image/*" onChange={event => compressImage(event.target.files[0]).then(imageBase64 => setDraft({ ...draft, imageBase64 }))} />
+        <button type="button" className="ghost compact" onClick={openDrive}>เลือกจาก Google Drive</button>
+      </Field>
+      {(draft.imageBase64 || draft.ImageURL) && <img className="preview" src={draft.imageBase64 || draft.ImageURL} alt="ตัวอย่างรูป" />}
       <label className="checkline"><input type="checkbox" checked={String(draft.IsActive).toUpperCase() !== 'FALSE'} onChange={event => setDraft({ ...draft, IsActive: event.target.checked ? 'TRUE' : 'FALSE' })} /><span>เปิดขาย</span></label>
       <div className="row-actions"><button className="primary" disabled={busy} onClick={save}>บันทึก</button><button className="ghost" onClick={() => setDraft(null)}>ยกเลิก</button></div>
+    </div>}
+    {driveOpen && <div className="modal">
+      <div className="modal-card">
+        <h2>เลือกรูปจาก Google Drive</h2>
+        <p className="hint">รูปจากโฟลเดอร์ "DinoEater Uploads" — กดรูปเพื่อใช้กับเมนูนี้</p>
+        {driveError && <p className="hint error">{driveError}</p>}
+        <div className="drive-grid">
+          {driveImages.map(image => <button key={image.id} type="button" className="drive-item" onClick={() => pickDrive(image.id)}><img src={`https://drive.google.com/thumbnail?id=${image.id}&sz=w400`} alt={image.name} /><span>{image.name}</span></button>)}
+        </div>
+        {!driveImages.length && !driveError && <p className="hint">ไม่พบรูปในโฟลเดอร์</p>}
+        <div className="row-actions"><button className="ghost" onClick={() => setDriveOpen(false)}>ปิด</button></div>
+      </div>
     </div>}
     <div className="menu-grid">{items.map(item => <article className="food-card admin-card" key={item.ID}>
       <div className="food-image" onClick={() => setDraft({ ...item })}>{item.ImageURL ? <img src={item.ImageURL} alt={item.Name} /> : '🍢'}</div>
@@ -239,6 +275,60 @@ function AdminMenu({ token, reloadStore }) {
         </div>
       </div>
     </article>)}</div>
+  </div>
+}
+
+function AdminOptions({ token }) {
+  const [groups, setGroups] = useState([])
+  const [draft, setDraft] = useState(null)
+  const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
+  const load = async () => { try { setGroups(await api('getOptionGroups', { sessionToken: token })); setError('') } catch (loadError) { setError(loadError.message) } }
+  useEffect(() => { load() }, [token])
+
+  function addChoice() { setDraft(current => ({ ...current, choices: [...(current.choices || []), ''] })) }
+  function setChoice(index, value) { setDraft(current => ({ ...current, choices: current.choices.map((label, i) => i === index ? value : label) })) }
+  function removeChoice(index) { setDraft(current => ({ ...current, choices: current.choices.filter((label, i) => i !== index) })) }
+  async function save() {
+    const labels = (draft.choices || []).map(label => String(label).trim()).filter(Boolean)
+    if (!String(draft.Name).trim()) return setError('กรุณาระบุชื่อตัวเลือกเสริม')
+    if (!labels.length) return setError('กรุณาเพิ่มตัวเลือกอย่างน้อย 1 อย่าง')
+    setBusy(true)
+    try { await api('saveOptionGroup', { sessionToken: token, group: draft, choices: labels }); setDraft(null); await load() } catch (saveError) { setError(saveError.message) } finally { setBusy(false) }
+  }
+  async function remove(group) {
+    if (!confirm(`ลบตัวเลือกเสริม "${group.Name}"?`)) return
+    try { await api('deleteOptionGroup', { sessionToken: token, groupId: group.GroupID }); await load() } catch (removeError) { setError(removeError.message) }
+  }
+
+  return <div>
+    <div className="row-between"><h2>ตัวเลือกเสริม</h2><button className="primary compact" onClick={() => setDraft({ Name: '', Required: false, MultiSelect: false, IsActive: 'TRUE', choices: [''] })}>+ เพิ่ม</button></div>
+    <p className="hint">ตอนลูกค้ากดยืนยันออเดอร์ ระบบจะให้เลือกกลุ่มเหล่านี้ก่อนส่งออเดอร์ให้ร้าน แต่ละกลุ่มกำหนดได้ว่าจะ "บังคับเลือก" หรือไม่ และเลือกได้อย่างเดียวหรือหลายอย่าง</p>
+    {error && <p className="hint error">{error}</p>}
+    {draft && <div className="card">
+      <Field label="ชื่อตัวเลือกเสริม"><input value={draft.Name} onChange={event => setDraft({ ...draft, Name: event.target.value })} placeholder="เช่น รับไม้หรือไม่" /></Field>
+      <div className="option-choices-edit">
+        <span className="hint">ตัวเลือกในกลุ่มนี้ (เพิ่มได้เรื่อย ๆ)</span>
+        {(draft.choices || []).map((label, index) => <div className="option-edit-row" key={index}>
+          <input value={label} onChange={event => setChoice(index, event.target.value)} placeholder={`ตัวเลือก ${index + 1}`} />
+          <button className="ghost compact" onClick={() => removeChoice(index)}>ลบ</button>
+        </div>)}
+        <button className="ghost compact" onClick={addChoice}>+ เพิ่มตัวเลือก</button>
+      </div>
+      <label className="checkline"><input type="checkbox" checked={!!draft.Required} onChange={event => setDraft({ ...draft, Required: event.target.checked })} /><span>บังคับให้ลูกค้าต้องเลือก</span></label>
+      <label className="checkline"><input type="checkbox" checked={!!draft.MultiSelect} onChange={event => setDraft({ ...draft, MultiSelect: event.target.checked })} /><span>เลือกได้หลายอย่าง (ไม่ติ๊ก = เลือกได้อย่างเดียว)</span></label>
+      <label className="checkline"><input type="checkbox" checked={String(draft.IsActive).toUpperCase() !== 'FALSE'} onChange={event => setDraft({ ...draft, IsActive: event.target.checked ? 'TRUE' : 'FALSE' })} /><span>เปิดใช้งาน</span></label>
+      <div className="row-actions"><button className="primary" disabled={busy} onClick={save}>บันทึก</button><button className="ghost" onClick={() => setDraft(null)}>ยกเลิก</button></div>
+    </div>}
+    {groups.map(group => <article className="order-card" key={group.GroupID}>
+      <b>{group.Name} {String(group.IsActive) === 'true' || group.IsActive === true ? '' : '(ปิด)'}</b>
+      <span>{group.Required ? 'ต้องเลือก' : 'ไม่บังคับ'} · {group.MultiSelect ? 'เลือกได้หลายอย่าง' : 'เลือกได้อย่างเดียว'} · {group.choices.map(choice => choice.Label).join(' / ')}</span>
+      <div className="row-actions">
+        <button onClick={() => setDraft({ Name: group.Name, Required: group.Required, MultiSelect: group.MultiSelect, IsActive: group.IsActive ? 'TRUE' : 'FALSE', SortOrder: group.SortOrder, GroupID: group.GroupID, choices: group.choices.map(choice => choice.Label) })}>แก้ไข</button>
+        <button onClick={() => remove(group)}>ลบ</button>
+      </div>
+    </article>)}
+    {!groups.length && !error && <p className="hint">ยังไม่มีตัวเลือกเสริม — กด "เพิ่ม" เพื่อสร้าง (เช่น "รับไม้หรือไม่")</p>}
   </div>
 }
 

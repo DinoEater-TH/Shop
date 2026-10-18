@@ -136,7 +136,7 @@ export default function App() {
     </header>
     {notice && <div className="notice">{notice}<button onClick={() => setNotice('')}>×</button></div>}
 
-    {screen === 'menu' && <MenuScreen menu={store.menu} addItem={addItem} user={user} onProfile={logoutOrLogin} onLightbox={(src, title) => src && setLightbox({ src, title })} />}
+    {screen === 'menu' && <MenuScreen menu={store.menu} addItem={addItem} user={user} onProfile={logoutOrLogin} onLightbox={(list, index) => list?.length && setLightbox({ list, index })} />}
     {screen === 'store' && <StoreScreen store={store} user={user} onProfile={logoutOrLogin} />}
     {screen === 'cart' && <CartScreen cart={cart} updateQuantity={updateQuantity} onCheckout={() => setScreen('checkout')} onContinue={() => setScreen('menu')} />}
     {screen === 'checkout' && <CheckoutScreen cart={cart} user={user} store={store} onStoreChange={(_, nextUser) => nextUser && setUser({ ...user, ...nextUser })} onOrderCreated={created => { setCart([]); setChatOpen(false); previousStatus.current = created.Status; setOrder(created); setScreen('order') }} />}
@@ -154,6 +154,6 @@ export default function App() {
       {isAdmin(user) && <button onClick={() => setScreen('admin')}>ร้านค้า</button>}
     </nav>
 
-    {lightbox && <Lightbox src={lightbox.src} title={lightbox.title} onClose={() => setLightbox(null)} />}
+    {lightbox && <Lightbox list={lightbox.list} index={lightbox.index} onStep={delta => setLightbox(current => current ? { ...current, index: (current.index + delta + current.list.length) % current.list.length } : current)} onClose={() => setLightbox(null)} />}
   </div>
 }

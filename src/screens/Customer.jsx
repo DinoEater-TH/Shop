@@ -1,18 +1,19 @@
 import React, { useEffect, useState } from 'react'
-import { api, baht, compressImage, deliveryFeeFor, distanceKm, fmtTime, num, promoOf, storeDirectionsUrl } from '../api'
+import { api, baht, compressImage, deliveryFeeFor, distanceKm, fmtTime, num, orderOptions, promoOf, storeDirectionsUrl } from '../api'
 import { ChatRoom, Empty, Field, MapPicker, QueueTimer, Receipt, StatusBadge, StoreMap } from '../components'
 
 export function MenuScreen({ menu, addItem, onLightbox, onProfile, user }) {
+  const gallery = menu.filter(item => item.ImageURL).map(item => ({ ID: item.ID, src: item.ImageURL, title: item.Name }))
   return <section>
     <div className="hero">
       <p>ทอดใหม่ทุกออเดอร์</p>
       <h1>หิวเมื่อไร<br />ให้ DinoEater ดูแล</h1>
       <button onClick={onProfile}>{user ? `${user.Name} · ${num(user.Stamps)} แสตมป์` : 'เข้าสู่ระบบสมาชิก'}</button>
     </div>
-    <div className="section-title"><h2>เมนูแนะนำ</h2><small>แตะรูปเพื่อดูเต็มจอ</small></div>
+    <div className="section-title"><h2>เมนูแนะนำ</h2><small>{gallery.length ? 'แตะรูปเพื่อดูเต็มจอ' : ''}</small></div>
     <div className="menu-grid">
       {menu.map(item => <article className="food-card" key={item.ID}>
-        <div className={`food-image${item.ImageURL ? ' zoomable' : ''}`} onClick={() => item.ImageURL && onLightbox(item.ImageURL, item.Name)}>
+        <div className={`food-image${item.ImageURL ? ' zoomable' : ''}`} onClick={() => { const index = gallery.findIndex(row => String(row.ID) === String(item.ID)); if (index >= 0) onLightbox(gallery, index) }}>
           {item.ImageURL ? <img src={item.ImageURL} alt={item.Name} /> : '🍢'}
         </div>
         <div className="food-body">
@@ -85,6 +86,10 @@ export function CheckoutScreen({ cart, user, store, onOrderCreated, onStoreChang
   const [error, setError] = useState('')
   const [member, setMember] = useState(user || null)
   const [checked, setChecked] = useState(false)
+  const optionGroups = store.options || []
+  const [selection, setSelection] = useState({})
+  const [showOptions, setShowOptions] = useState(false)
+  const [optionError, setOptionError] = useState('')
   const subtotal = cart.reduce((sum, item) => sum + num(item.Price) * item.quantity, 0)
   const distance = form.point ? distanceKm(settings, form.point) : 0
   const deliveryFee = form.orderType === 'Delivery' ? deliveryFeeFor(settings, subtotal, distance) : 0
@@ -124,18 +129,48 @@ export function CheckoutScreen({ cart, user, store, onOrderCreated, onStoreChang
   const discount = Math.min(subtotal + deliveryFee, lines.reduce((sum, line) => sum + line.value, 0))
   const total = Math.max(0, subtotal + deliveryFee - discount)
 
-  async function submit() {
-    setError('')
+  function validationError() {
     const digits = String(form.phone).replace(/\D/g, '')
-    if (digits && !/^0\d{8,9}$/.test(digits)) return setError('เบอร์โทรศัพท์ไม่ถูกต้อง หรือเว้นว่างเพื่อสั่งแบบไม่ระบุเบอร์')
-    if (form.orderType === 'Delivery' && !form.address.trim()) return setError('กรุณาระบุที่อยู่จัดส่ง')
-    if (form.paymentMethod === 'Transfer' && !form.slip) return setError('กรุณาอัปโหลดสลิปโอนเงิน')
+    if (digits && !/^0\d{8,9}$/.test(digits)) return 'เบอร์โทรศัพท์ไม่ถูกต้อง หรือเว้นว่างเพื่อสั่งแบบไม่ระบุเบอร์'
+    if (form.orderType === 'Delivery' && !form.address.trim()) return 'กรุณาระบุที่อยู่จัดส่ง'
+    if (form.paymentMethod === 'Transfer' && !form.slip) return 'กรุณาอัปโหลดสลิปโอนเงิน'
+    return ''
+  }
+  function toggleOption(group, label) {
+    setOptionError('')
+    setSelection(current => {
+      const picked = current[group.GroupID] || []
+      if (group.MultiSelect) return { ...current, [group.GroupID]: picked.includes(label) ? picked.filter(item => item !== label) : picked.concat(label) }
+      return { ...current, [group.GroupID]: picked.includes(label) ? [] : [label] }
+    })
+  }
+  function selectedOptions() {
+    return optionGroups
+      .map(group => ({ groupId: group.GroupID, groupName: group.Name, choices: selection[group.GroupID] || [] }))
+      .filter(group => group.choices.length)
+  }
+  function onConfirm() {
+    const problem = validationError()
+    if (problem) return setError(problem)
+    setError('')
+    if (optionGroups.length) { setOptionError(''); setShowOptions(true); return }
+    doSubmit()
+  }
+  function confirmOptions() {
+    const missing = optionGroups.filter(group => group.Required && !(selection[group.GroupID] || []).length)
+    if (missing.length) return setOptionError(`กรุณาเลือก: ${missing.map(group => group.Name).join(', ')}`)
+    setOptionError('')
+    doSubmit()
+  }
+
+  async function doSubmit() {
+    setError('')
     setBusy(true)
     try {
       const order = await api('createOrder', {
         order: {
           userId: user?.ID || '',
-          phone: digits,
+          phone: String(form.phone).replace(/\D/g, ''),
           orderType: form.orderType,
           addressDetail: form.address,
           lat: form.point?.lat || '',
@@ -148,12 +183,13 @@ export function CheckoutScreen({ cart, user, store, onOrderCreated, onStoreChang
           total,
           slipBase64: form.slip,
           estimatedTime: num(settings.PrepMinutes),
-          redeemStamps: form.redeem && canRedeem
+          redeemStamps: form.redeem && canRedeem,
+          options: selectedOptions()
         },
         items: cart.map(item => ({ menuId: item.ID, quantity: item.quantity, price: item.Price }))
       })
       if (user) {
-        try { const fresh = await api('login', { phone: digits || user.Phone }); if (fresh.exists) onStoreChange(null, fresh) } catch { /* ignore refresh */ }
+        try { const fresh = await api('login', { phone: String(form.phone).replace(/\D/g, '') || user.Phone }); if (fresh.exists) onStoreChange(null, fresh) } catch { /* ignore refresh */ }
       }
       onOrderCreated(order)
     } catch (submitError) { setError(submitError.message) } finally { setBusy(false) }
@@ -192,7 +228,29 @@ export function CheckoutScreen({ cart, user, store, onOrderCreated, onStoreChang
     </div>
     <Receipt subtotal={subtotal} deliveryFee={deliveryFee} discount={discount} total={total} lines={lines} />
     {error && <p className="hint error">{error}</p>}
-    <button className="primary" disabled={busy} onClick={submit}>{busy ? 'กำลังส่งออเดอร์...' : 'ยืนยันการสั่งซื้อ'}</button>
+    {optionGroups.length > 0 && <p className="hint">มีตัวเลือกเสริม {optionGroups.length} อย่าง จะให้เลือกในขั้นถัดไป</p>}
+    <button className="primary" disabled={busy} onClick={onConfirm}>{busy ? 'กำลังส่งออเดอร์...' : 'ยืนยันการสั่งซื้อ'}</button>
+    {showOptions && <div className="modal">
+      <div className="modal-card">
+        <h2>ตัวเลือกเสริม</h2>
+        <p className="hint">เลือกตามที่ต้องการ แล้วกดยืนยันเพื่อส่งออเดอร์ให้ร้าน</p>
+        {optionGroups.map(group => <div className="option-group" key={group.GroupID}>
+          <div className="option-head">
+            <b>{group.Name}{group.Required ? ' *' : ''}</b>
+            <small>{group.MultiSelect ? 'เลือกได้หลายอย่าง' : 'เลือกได้อย่างเดียว'}{group.Required ? ' · ต้องเลือก' : ' · ไม่บังคับ'}</small>
+          </div>
+          <div className="option-choices">
+            {group.choices.map(choice => {
+              const active = (selection[group.GroupID] || []).includes(choice.Label)
+              return <button key={choice.ChoiceID} className={active ? 'selected' : ''} onClick={() => toggleOption(group, choice.Label)}>{choice.Label}</button>
+            })}
+          </div>
+        </div>)}
+        {optionError && <p className="hint error">{optionError}</p>}
+        <button className="primary" disabled={busy} onClick={confirmOptions}>{busy ? 'กำลังส่งออเดอร์...' : 'ยืนยันและส่งออเดอร์'}</button>
+        <button className="ghost" onClick={() => setShowOptions(false)}>ย้อนกลับ</button>
+      </div>
+    </div>}
   </section>
 }
 
@@ -405,6 +463,7 @@ export function OrderStatusScreen({ order, store, user, onOpenChat, chatOpen, ch
     {order.Status === 'Completed' && <p>{settings.ThankYouMessage}</p>}
     <div className="receipt">
       {(order.items || []).map(item => <div key={item.ID}><span>{item.MenuID} × {item.Quantity}</span><b>{baht(num(item.Price) * num(item.Quantity))}</b></div>)}
+      {orderOptions(order).map(group => <div className="option-line" key={group.groupId}><span>{group.groupName}</span><b>{group.choices.join(', ')}</b></div>)}
       <div><span>ค่าอาหาร</span><b>{baht(order.SubTotal)}</b></div>
       {num(order.DeliveryFee) > 0 && <div><span>ค่าจัดส่ง</span><b>{baht(order.DeliveryFee)}</b></div>}
       {num(order.Discount) > 0 && <div className="discount-line"><span>ส่วนลด</span><b>-{baht(order.Discount)}</b></div>}
