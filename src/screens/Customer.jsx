@@ -2,14 +2,34 @@ import React, { useEffect, useState } from 'react'
 import { api, baht, compressImage, deliveryFeeFor, distanceKm, driveImage, fmtTime, num, orderOptions, promoOf, storeDirectionsUrl } from '../api'
 import { ChatRoom, Empty, Field, MapPicker, QueueTimer, Receipt, StatusBadge, StoreMap } from '../components'
 
-export function MenuScreen({ menu, addItem, onLightbox, onProfile, user }) {
+export function MenuScreen({ menu, popular = [], addItem, onLightbox, onProfile, user }) {
   const gallery = menu.filter(item => item.ImageURL).map(item => ({ ID: item.ID, id: item.ID, src: driveImage(item.ImageURL, 1600), title: item.Name }))
+  const openLightbox = item => { const index = gallery.findIndex(row => String(row.ID) === String(item.ID)); if (index >= 0) onLightbox(gallery, index) }
   return <section>
     <div className="hero">
       <p>ทอดใหม่ทุกออเดอร์</p>
       <h1>หิวเมื่อไร<br />ให้ DinoEater ดูแล</h1>
       <button onClick={onProfile}>{user ? `${user.Name} · ${num(user.Stamps)} แสตมป์` : 'เข้าสู่ระบบสมาชิก'}</button>
     </div>
+    {popular.length > 0 && <>
+      <div className="section-title"><h2>🔥 สินค้ายอดนิยม</h2><small>อันดับขายดีจากออเดอร์จริง</small></div>
+      <div className="popular-row">
+        {popular.map((item, index) => <article className="popular-card" key={item.ID}>
+          <span className={`popular-rank${index === 0 ? ' top' : ''}`}>#{index + 1}</span>
+          <div className={`popular-image${item.ImageURL ? ' zoomable' : ''}`} onClick={() => openLightbox(item)}>
+            {item.ImageURL ? <img src={driveImage(item.ImageURL, 400)} alt={item.Name} loading="lazy" /> : '🍢'}
+          </div>
+          <div className="popular-body">
+            <h3>{item.Name}</h3>
+            <small className="popular-sold">ขายแล้ว {num(item.Sold)} ชิ้น</small>
+            <div className="popular-foot">
+              <strong>{baht(item.Price)}</strong>
+              <button className="add" onClick={() => addItem(item)}>+</button>
+            </div>
+          </div>
+        </article>)}
+      </div>
+    </>}
     <div className="section-title"><h2>เมนูแนะนำ</h2><small>{gallery.length ? 'แตะรูปเพื่อดูเต็มจอ' : ''}</small></div>
     <div className="menu-grid">
       {menu.map(item => <article className="food-card" key={item.ID}>

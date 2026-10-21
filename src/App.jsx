@@ -4,7 +4,7 @@ import { Lightbox, WelcomeModal } from './components'
 import { CartScreen, CheckoutScreen, MenuScreen, OrderStatusScreen, ProfileScreen, StoreScreen } from './screens/Customer'
 import AdminScreen from './screens/Admin'
 
-const DEFAULT_STORE = { settings: {}, menu: [], promotions: [] }
+const DEFAULT_STORE = { settings: {}, menu: [], promotions: [], popular: [] }
 
 export default function App() {
   const [screen, setScreen] = useState('menu')
@@ -136,7 +136,7 @@ export default function App() {
     </header>
     {notice && <div className="notice">{notice}<button onClick={() => setNotice('')}>×</button></div>}
 
-    {screen === 'menu' && <MenuScreen menu={store.menu} addItem={addItem} user={user} onProfile={logoutOrLogin} onLightbox={(list, index) => list?.length && setLightbox({ list, index })} />}
+    {screen === 'menu' && <MenuScreen menu={store.menu} popular={store.popular || []} addItem={addItem} user={user} onProfile={logoutOrLogin} onLightbox={(list, index) => list?.length && setLightbox({ list, index })} />}
     {screen === 'store' && <StoreScreen store={store} user={user} onProfile={logoutOrLogin} />}
     {screen === 'cart' && <CartScreen cart={cart} updateQuantity={updateQuantity} onCheckout={() => setScreen('checkout')} onContinue={() => setScreen('menu')} />}
     {screen === 'checkout' && <CheckoutScreen cart={cart} user={user} store={store} onStoreChange={(_, nextUser) => nextUser && setUser({ ...user, ...nextUser })} onOrderCreated={created => { setCart([]); setChatOpen(false); previousStatus.current = created.Status; setOrder(created); setScreen('order') }} />}

@@ -283,7 +283,29 @@ function getStore_() {
   const settings = settings_();
   const menu = rows_('Menu').filter(function (row) { return String(row.IsActive).toUpperCase() !== 'FALSE'; });
   const promos = rows_('Promotions').filter(function (row) { return String(row.IsActive).toUpperCase() !== 'FALSE'; });
-  return { settings: settings, menu: menu, promotions: promos, options: optionGroups_(true) };
+  return { settings: settings, menu: menu, promotions: promos, options: optionGroups_(true), popular: popularItems_(6, menu) };
+}
+function popularItems_(limit, menu) {
+  const cancelled = {};
+  rows_('Orders').forEach(function (order) {
+    if (String(order.Status).toUpperCase() === 'CANCELLED') cancelled[String(order.OrderID)] = true;
+  });
+  const sold = {};
+  rows_('OrderItems').forEach(function (item) {
+    if (cancelled[String(item.OrderID)]) return;
+    const id = String(item.MenuID);
+    sold[id] = number_(sold[id]) + number_(item.Quantity);
+  });
+  return menu
+    .filter(function (item) { return number_(sold[String(item.ID)]) > 0; })
+    .map(function (item) {
+      const record = {};
+      Object.keys(item).forEach(function (key) { record[key] = item[key]; });
+      record.Sold = number_(sold[String(item.ID)]);
+      return record;
+    })
+    .sort(function (a, b) { return b.Sold - a.Sold; })
+    .slice(0, limit);
 }
 function getMenu_(request) { if (request.sessionToken) requireAdmin_(request.sessionToken); return rows_('Menu'); }
 function getPromotions_() { return rows_('Promotions'); }
