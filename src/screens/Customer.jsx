@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { api, baht, compressImage, deliveryFeeFor, distanceKm, driveImage, fmtTime, num, orderOptions, promoOf, storeDirectionsUrl } from '../api'
+import { api, baht, compressImage, deliveryFeeFor, distanceKm, driveImage, fmtTime, isNewItem, num, orderOptions, promoOf, storeDirectionsUrl } from '../api'
 import { ChatRoom, Empty, Field, MapPicker, QueueTimer, Receipt, StatusBadge, StoreMap } from '../components'
 
 export function MenuScreen({ menu, popular = [], addItem, onLightbox, onProfile, user }) {
@@ -16,6 +16,7 @@ export function MenuScreen({ menu, popular = [], addItem, onLightbox, onProfile,
       <div className="popular-row">
         {popular.map((item, index) => <article className="popular-card" key={item.ID}>
           <span className={`popular-rank${index === 0 ? ' top' : ''}`}>#{index + 1}</span>
+          {isNewItem(item) && <span className="new-badge">New · อยากให้ลอง</span>}
           <div className={`popular-image${item.ImageURL ? ' zoomable' : ''}`} onClick={() => openLightbox(item)}>
             {item.ImageURL ? <img src={driveImage(item.ImageURL, 400)} alt={item.Name} loading="lazy" /> : '🍢'}
           </div>
@@ -31,9 +32,10 @@ export function MenuScreen({ menu, popular = [], addItem, onLightbox, onProfile,
       </div>
     </>}
     <div className="section-title"><h2>เมนูแนะนำ</h2><small>{gallery.length ? 'แตะรูปเพื่อดูเต็มจอ' : ''}</small></div>
-    <div className="menu-grid">
+      <div className="menu-grid">
       {menu.map(item => <article className="food-card" key={item.ID}>
-        <div className={`food-image${item.ImageURL ? ' zoomable' : ''}`} onClick={() => { const index = gallery.findIndex(row => String(row.ID) === String(item.ID)); if (index >= 0) onLightbox(gallery, index) }}>
+        {isNewItem(item) && <span className="new-badge">New · อยากให้ลอง</span>}
+        <div className={`food-image${item.ImageURL ? ' zoomable' : ''}`} onClick={() => openLightbox(item)}>
           {item.ImageURL ? <img src={driveImage(item.ImageURL, 600)} alt={item.Name} loading="lazy" /> : '🍢'}
         </div>
         <div className="food-body">

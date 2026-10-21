@@ -13,6 +13,12 @@ export const num = value => { const result = Number(value); return Number.isFini
 export const baht = value => new Intl.NumberFormat('th-TH', { style: 'currency', currency: 'THB', maximumFractionDigits: 0 }).format(num(value))
 export const promoOf = (promotions, type) => (promotions || []).find(item => String(item.PromoType) === type && String(item.IsActive).toUpperCase() !== 'FALSE')
 export const isAdmin = user => !!user && ['Admin', 'SuperAdmin'].includes(user.Role)
+export const isNewItem = item => {
+  const at = item?.NewAt
+  if (!at) return false
+  const time = new Date(at).getTime()
+  return Number.isFinite(time) && Date.now() - time < 30 * 24 * 60 * 60 * 1000
+}
 export const fmtTime = value => value ? new Date(value).toLocaleString('th-TH', { dateStyle: 'short', timeStyle: 'short' }) : '-'
 
 export function orderOptions(order) {

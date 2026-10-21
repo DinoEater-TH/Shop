@@ -30,6 +30,7 @@ header{height:64px;display:flex;align-items:center;justify-content:space-between
 .popular-foot{display:flex;justify-content:space-between;align-items:center;margin-top:4px;padding-right:32px}
 .popular-card strong{color:#d94823;font-size:14px}
 .popular-card .add{bottom:10px;right:8px;width:28px;height:28px;font-size:18px}
+.new-badge{position:absolute;top:8px;right:8px;z-index:2;background:#2e7d32;color:#fff;border-radius:999px;padding:3px 9px;font-size:10px;font-weight:600;pointer-events:none;box-shadow:0 2px 6px #0003}
 .food-card{background:#fff;border-radius:18px;overflow:hidden;box-shadow:0 4px 18px #371b0c0c;position:relative;display:flex;flex-direction:column}
 .food-image{height:118px;background:#ffead7;display:grid;place-items:center;font-size:54px;cursor:default}
 .food-image.zoomable{cursor:zoom-in}

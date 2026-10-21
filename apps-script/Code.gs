@@ -6,7 +6,7 @@ const SESSION_SECONDS = 21600;
 const TABLES = {
   Settings: ['Key', 'Value'],
   Users: ['ID', 'Phone', 'PIN', 'Name', 'ProfilePic', 'Role', 'Stamps', 'CreatedAt', 'Address', 'Lat', 'Lng'],
-  Menu: ['ID', 'Name', 'Description', 'Price', 'ImageURL', 'Stock', 'IsActive'],
+  Menu: ['ID', 'Name', 'Description', 'Price', 'ImageURL', 'Stock', 'IsActive', 'NewAt'],
   Orders: ['OrderID', 'UserID', 'Phone', 'OrderType', 'AddressDetail', 'Lat', 'Lng', 'Distance', 'DeliveryFee', 'PaymentMethod', 'SubTotal', 'Discount', 'Total', 'Status', 'SlipURL', 'EstimatedTime', 'CreatedAt', 'CompletedAt', 'StampEarned', 'StartedAt', 'QueuePosition', 'Options'],
   OrderItems: ['ID', 'OrderID', 'MenuID', 'Quantity', 'Price'],
   Promotions: ['PromoType', 'Condition', 'DiscountValue', 'FreeMenuID', 'IsActive'],
@@ -506,6 +506,7 @@ function saveMenu_(request) {
   const item = request.menu || {};
   if (!item.Name) throw new Error('กรุณาระบุชื่อเมนู');
   const image = item.imageBase64 ? uploadBase64_(item.imageBase64, 'menu-' + Utilities.getUuid() + '.jpg') : '';
+  const newAt = item.NewAt ? new Date(item.NewAt) : null;
   const record = {
     ID: item.ID || 'M' + Date.now(),
     Name: item.Name,
@@ -513,7 +514,8 @@ function saveMenu_(request) {
     Price: number_(item.Price),
     ImageURL: image || item.ImageURL || '',
     Stock: item.Stock === '' || item.Stock === undefined ? 'Unlimited' : item.Stock,
-    IsActive: String(item.IsActive).toLowerCase() === 'false' ? 'FALSE' : 'TRUE'
+    IsActive: String(item.IsActive).toLowerCase() === 'false' ? 'FALSE' : 'TRUE',
+    NewAt: newAt && !isNaN(newAt.getTime()) ? newAt : ''
   };
   if (item.ID) updateRow_('Menu', 'ID', item.ID, record); else append_('Menu', record);
   log_(admin.ID, item.ID ? 'MENU_UPDATE' : 'MENU_CREATE', record.Name);

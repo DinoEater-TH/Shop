@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import QRCode from 'qrcode'
-import { api, baht, beep, compressImage, driveImage, fmtTime, num, orderOptions } from '../api'
+import { api, baht, beep, compressImage, driveImage, fmtTime, isNewItem, num, orderOptions } from '../api'
 import { ChatRoom, Empty, Field, MapPicker, StatusBadge } from '../components'
 
 const TABS = [
@@ -239,7 +239,7 @@ function AdminMenu({ token, reloadStore }) {
   }
 
   return <div>
-    <div className="row-between"><h2>จัดการเมนู</h2><button className="primary compact" onClick={() => setDraft({ Name: '', Description: '', Price: 0, Stock: 'Unlimited', IsActive: 'TRUE' })}>+ เพิ่มเมนู</button></div>
+      <div className="row-between"><h2>จัดการเมนู</h2><button className="primary compact" onClick={() => setDraft({ Name: '', Description: '', Price: 0, Stock: 'Unlimited', IsActive: 'TRUE', NewAt: '' })}>+ เพิ่มเมนู</button></div>
     {error && <p className="hint error">{error}</p>}
     {draft && <div className="card">
       <Field label="ชื่อเมนู"><input value={draft.Name} onChange={event => setDraft({ ...draft, Name: event.target.value })} /></Field>
@@ -252,6 +252,7 @@ function AdminMenu({ token, reloadStore }) {
       </Field>
       {(draft.imageBase64 || draft.ImageURL) && <img className="preview" src={draft.imageBase64 || driveImage(draft.ImageURL, 600)} alt="ตัวอย่างรูป" />}
       <label className="checkline"><input type="checkbox" checked={String(draft.IsActive).toUpperCase() !== 'FALSE'} onChange={event => setDraft({ ...draft, IsActive: event.target.checked ? 'TRUE' : 'FALSE' })} /><span>เปิดขาย</span></label>
+      <label className="checkline"><input type="checkbox" checked={isNewItem(draft)} onChange={event => setDraft({ ...draft, NewAt: event.target.checked ? (isNewItem(draft) ? draft.NewAt : new Date().toISOString()) : '' })} /><span>เมนูใหม่ — ขึ้นป้าย "New · อยากให้ลอง" (ปลดอัตโนมัติใน 1 เดือน)</span></label>
       <div className="row-actions"><button className="primary" disabled={busy} onClick={save}>บันทึก</button><button className="ghost" onClick={() => setDraft(null)}>ยกเลิก</button></div>
     </div>}
     {driveOpen && <div className="modal">
@@ -267,6 +268,7 @@ function AdminMenu({ token, reloadStore }) {
       </div>
     </div>}
     <div className="menu-grid">{items.map(item => <article className="food-card admin-card" key={item.ID}>
+      {isNewItem(item) && <span className="new-badge">New · อยากให้ลอง</span>}
       <div className="food-image" onClick={() => setDraft({ ...item })}>{item.ImageURL ? <img src={driveImage(item.ImageURL, 600)} alt={item.Name} loading="lazy" /> : '🍢'}</div>
       <div className="food-body">
         <h3>{item.Name}</h3>
