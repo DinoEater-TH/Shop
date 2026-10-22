@@ -377,6 +377,9 @@ function AdminPromos({ store, token, reloadStore }) {
 function AdminSettings({ store, token, reloadStore }) {
   const [draft, setDraft] = useState({ ...(store.settings || {}) })
   const [message, setMessage] = useState('')
+  const [driveOpen, setDriveOpen] = useState(false)
+  const [driveImages, setDriveImages] = useState([])
+  const [driveError, setDriveError] = useState('')
   const keys = [
     ['StoreName', 'ชื่อร้าน'], ['StorePhone', 'เบอร์รับโอน/ติดต่อ'], ['StoreAddress', 'ที่อยู่ร้าน'],
     ['PrepMinutes', 'เวลาทำอาหารพื้นฐาน (นาที)'], ['DisputeMinutes', 'เวลาเปิดรับรายงานปัญหาหลังส่ง (นาที)'],
@@ -392,17 +395,43 @@ function AdminSettings({ store, token, reloadStore }) {
       await reloadStore()
     } catch (saveError) { setMessage(saveError.message) }
   }
+  async function openDrive() {
+    setDriveOpen(true); setDriveError('')
+    try { setDriveImages(await api('listDriveImages', { sessionToken: token })) } catch (driveLoadError) { setDriveError(driveLoadError.message) }
+  }
+  async function pickDrive(fileId) {
+    try { const url = await api('useDriveImage', { sessionToken: token, fileId }); setDraft(current => ({ ...current, StoreLogo: url, StoreLogoBase64: '' })); setDriveOpen(false) } catch (pickError) { setDriveError(pickError.message) }
+  }
+  const logoPreview = draft.StoreLogoBase64 || (draft.StoreLogo ? driveImage(draft.StoreLogo, 400) : '')
 
   return <div>
     <h2>ตั้งค่าร้าน</h2>
     {keys.map(([key, label]) => <Field key={key} label={label}><input value={draft[key] ?? ''} onChange={event => setDraft({ ...draft, [key]: event.target.value })} /></Field>)}
     <label className="checkline"><input type="checkbox" checked={String(draft.AcceptingOrders).toUpperCase() !== 'FALSE'} onChange={event => setDraft({ ...draft, AcceptingOrders: event.target.checked ? 'TRUE' : 'FALSE' })} /><span>เปิดรับออเดอร์</span></label>
+    <Field label="โลโก้ร้าน" hint="แสดงบนหน้าแรกของลูกค้า · เปลี่ยนได้ตลอดเวลา">
+      <input type="file" accept="image/*" onChange={event => compressImage(event.target.files[0], 800, 0.85).then(imageBase64 => setDraft({ ...draft, StoreLogoBase64: imageBase64 }))} />
+      <button type="button" className="ghost compact" onClick={openDrive}>เลือกจาก Google Drive</button>
+      {logoPreview && <button type="button" className="ghost compact" onClick={() => setDraft({ ...draft, StoreLogo: '', StoreLogoBase64: '' })}>ล้างโลโก้</button>}
+    </Field>
+    {logoPreview && <img className="preview logo" src={logoPreview} alt="logo" />}
     <Field label="ตำแหน่งร้าน (ใช้อ้างอิงค่าส่ง)" hint="ปักหมุดหรือใช้ตำแหน่งปัจจุบันของร้าน">
       <MapPicker store={draft} value={draft.StoreLat ? { lat: num(draft.StoreLat), lng: num(draft.StoreLng) } : null} onChange={point => setDraft({ ...draft, StoreLat: point.lat, StoreLng: point.lng })} />
     </Field>
     <Field label="ไอคอนแสตมป์"><input type="file" accept="image/*" onChange={event => compressImage(event.target.files[0], 400, 0.8).then(imageBase64 => setDraft({ ...draft, StampIconBase64: imageBase64 }))} /></Field>
     {draft.StampIconBase64 && <img className="preview small" src={draft.StampIconBase64} alt="stamp" />}
     {draft.StampIcon && !draft.StampIconBase64 && <img className="preview small" src={draft.StampIcon} alt="stamp" />}
+    {driveOpen && <div className="modal">
+      <div className="modal-card">
+        <h2>เลือกรูปจาก Google Drive</h2>
+        <p className="hint">รูปจากโฟลเดอร์ "DinoEater Uploads" — กดรูปเพื่อใช้เป็นโลโก้ร้าน</p>
+        {driveError && <p className="hint error">{driveError}</p>}
+        <div className="drive-grid">
+          {driveImages.map(image => <button key={image.id} type="button" className="drive-item" onClick={() => pickDrive(image.id)}><img src={`https://drive.google.com/thumbnail?id=${image.id}&sz=w400`} alt={image.name} /><span>{image.name}</span></button>)}
+        </div>
+        {!driveImages.length && !driveError && <p className="hint">ไม่พบรูปในโฟลเดอร์</p>}
+        <div className="row-actions"><button className="ghost" onClick={() => setDriveOpen(false)}>ปิด</button></div>
+      </div>
+    </div>}
     {message && <p className="hint">{message}</p>}
     <button className="primary" onClick={save}>บันทึกการตั้งค่า</button>
   </div>

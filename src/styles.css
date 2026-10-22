@@ -12,6 +12,7 @@ header{height:64px;display:flex;align-items:center;justify-content:space-between
 .hero p{margin:0;color:#ffd9b8}
 .hero h1{font-size:33px;line-height:1.15;margin:8px 0 20px}
 .hero button{border:0;background:#fff;color:#a6371b;border-radius:18px;padding:9px 15px;font-family:inherit;font-weight:600}
+.hero-logo{width:76px;height:76px;border-radius:50%;object-fit:cover;background:#fff;display:block;margin:0 auto 12px;box-shadow:0 4px 12px #0003}
 .section-title{display:flex;justify-content:space-between;align-items:baseline;padding:20px 18px 10px}
 .section-title h2{margin:0;font-size:20px}
 .section-title small,.hint{color:#806f66}
@@ -120,6 +121,7 @@ input[type=checkbox]{width:auto}
 .drive-item span{display:block;font-size:12px;padding:6px 8px;color:#5c4a41;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .preview{max-width:150px;border-radius:12px;margin-top:8px}
 .preview.small{max-width:64px}
+.preview.logo{width:96px;height:96px;border-radius:50%;object-fit:cover;border:2px solid #e8dcd1}
 .map-picker{margin:10px 0}
 .store-map{margin:14px 0}
 .map-fallback{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;background:#fff4e6;border:1px dashed #e0bd85;border-radius:14px;text-align:center;padding:24px 16px;color:#7a5a3a}
@@ -153,6 +155,7 @@ input[type=checkbox]{width:auto}
 .chat-input button{border:0;border-radius:10px;background:#e4572e;color:#fff;padding:0 16px;font-family:inherit;cursor:pointer}
 .profile-head{display:flex;align-items:center;gap:14px;background:#fff;border-radius:14px;padding:14px;margin:12px 0}
 .profile-head img{width:62px;height:62px;border-radius:50%;object-fit:cover;background:#f2e6da}
+.profile-head img.store-logo{border:2px solid #e8dcd1}
 .profile-head b{display:block}
 .profile-head small{display:block;color:#8a786e}
 .stamp-card{display:flex;align-items:center;gap:12px;background:#fff8e8;border:1px dashed #e0bd85;border-radius:14px;padding:14px;margin:14px 0}

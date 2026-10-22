@@ -2,11 +2,13 @@ import React, { useEffect, useState } from 'react'
 import { api, baht, compressImage, deliveryFeeFor, distanceKm, driveImage, fmtTime, isNewItem, num, orderOptions, promoOf, storeDirectionsUrl } from '../api'
 import { ChatRoom, Empty, Field, MapPicker, QueueTimer, Receipt, StatusBadge, StoreMap } from '../components'
 
-export function MenuScreen({ menu, popular = [], addItem, onLightbox, onProfile, user }) {
+export function MenuScreen({ store, menu, popular = [], addItem, onLightbox, onProfile, user }) {
   const gallery = menu.filter(item => item.ImageURL).map(item => ({ ID: item.ID, id: item.ID, src: driveImage(item.ImageURL, 1600), title: item.Name }))
   const openLightbox = item => { const index = gallery.findIndex(row => String(row.ID) === String(item.ID)); if (index >= 0) onLightbox(gallery, index) }
+  const logo = store?.settings?.StoreLogo ? driveImage(store.settings.StoreLogo, 400) : ''
   return <section>
     <div className="hero">
+      {logo && <img className="hero-logo" src={logo} alt="logo" onClick={onProfile} />}
       <p>ทอดใหม่ทุกออเดอร์</p>
       <h1>หิวเมื่อไร<br />ให้ DinoEater ดูแล</h1>
       <button onClick={onProfile}>{user ? `${user.Name} · ${num(user.Stamps)} แสตมป์` : 'เข้าสู่ระบบสมาชิก'}</button>
@@ -55,10 +57,11 @@ export function MenuScreen({ menu, popular = [], addItem, onLightbox, onProfile,
 
 export function StoreScreen({ store, onProfile, user }) {
   const settings = store.settings || {}
+  const logo = settings.StoreLogo ? driveImage(settings.StoreLogo, 400) : ''
   return <section className="page">
     <h1>ที่ตั้งร้าน</h1>
     <div className="profile-head">
-      <span className="store-pin big">📍</span>
+      {logo ? <img className="store-logo" src={logo} alt="logo" /> : <span className="store-pin big">📍</span>}
       <div>
         <b>{settings.StoreName || 'DinoEater'}</b>
         {settings.StoreAddress ? <small>{settings.StoreAddress}</small> : <small className="hint">ร้านยังไม่ระบุที่อยู่</small>}

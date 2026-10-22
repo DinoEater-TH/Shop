@@ -22,6 +22,7 @@ const DEFAULT_SETTINGS = {
   StoreAddress: '',
   StoreLat: '',
   StoreLng: '',
+  StoreLogo: '',
   PrepMinutes: '10',
   DisputeMinutes: '10',
   FreeDeliveryDistanceKm: '2',
@@ -542,17 +543,24 @@ function saveSettings_(request) {
   const admin = requireAdmin_(request.sessionToken);
   const incoming = request.settings || {};
   Object.keys(incoming).forEach(function (key) {
-    if (key === 'StampIconBase64') return;
+    if (key === 'StampIconBase64' || key === 'StoreLogoBase64') return;
     if (rows_('Settings').some(function (row) { return String(row.Key) === key; })) updateRow_('Settings', 'Key', key, { Value: incoming[key] });
     else append_('Settings', { Key: key, Value: incoming[key] });
   });
   if (incoming.StampIconBase64) {
     const url = uploadBase64_(incoming.StampIconBase64, 'stamp-icon.jpg');
-    if (rows_('Settings').some(function (row) { return String(row.Key) === 'StampIcon'; })) updateRow_('Settings', 'Key', 'StampIcon', { Value: url });
-    else append_('Settings', { Key: 'StampIcon', Value: url });
+    setSetting_('StampIcon', url);
+  }
+  if (incoming.StoreLogoBase64) {
+    const url = uploadBase64_(incoming.StoreLogoBase64, 'store-logo.jpg');
+    setSetting_('StoreLogo', url);
   }
   log_(admin.ID, 'SETTINGS_UPDATE', Object.keys(incoming).join(','));
   return settings_();
+}
+function setSetting_(key, value) {
+  if (rows_('Settings').some(function (row) { return String(row.Key) === key; })) updateRow_('Settings', 'Key', key, { Value: value });
+  else append_('Settings', { Key: key, Value: value });
 }
 
 /* ---------- users (admin) ---------- */
