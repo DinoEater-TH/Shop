@@ -212,3 +212,19 @@ input[type=checkbox]{width:auto}
 nav{position:fixed;bottom:0;left:0;right:0;max-width:680px;margin:auto;height:66px;display:flex;justify-content:space-around;align-items:center;background:#fff;border-top:1px solid #eee5dd;z-index:5}
 nav button{border:0;background:none;font-family:inherit;color:#62534b;font-size:12px;cursor:pointer}
 @media(min-width:681px){body{background:#eee3d8}.app-shell{box-shadow:0 0 40px #59351d1a}}
+
+button.btn-busy{position:relative;cursor:progress;filter:grayscale(.45);opacity:.72;color:transparent}
+button.btn-busy::after{content:'';position:absolute;top:50%;left:50%;width:16px;height:16px;margin:-8px 0 0 -8px;box-sizing:border-box;background:#fff;border:2px solid rgba(0,0,0,.14);border-top-color:#e4572e;border-radius:50%;animation:btnSpin .7s linear infinite}
+@keyframes btnSpin{to{transform:rotate(360deg)}}
+
+.pos-phone{display:flex;gap:8px;align-items:center}
+.pos-phone input{flex:1}
+.pos-phone .ghost.compact{margin:0;white-space:nowrap}
+.pos-grid{margin-top:12px}
+.pos-stepper{justify-content:space-between;padding:0;margin-top:10px}
+.pos-stepper b{min-width:20px;text-align:center;font-size:15px}
+.pos-stepper button:disabled{opacity:.4;cursor:not-allowed}
+.pos-done{margin-top:12px}
+.pos-done .ghost{margin-top:10px}
+.pos-options{margin-top:16px}
+.pos-options h3{font-size:15px;margin:0 0 8px}

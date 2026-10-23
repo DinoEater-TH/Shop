@@ -53,6 +53,8 @@ function dispatch_(request) {
     if (action === 'login') return ok_(login_(request));
     if (action === 'updateProfile') return ok_(updateProfile_(request));
     if (action === 'createOrder') return ok_(createOrder_(request));
+    if (action === 'createOrderByAdmin') return ok_(createOrderByAdmin_(request));
+    if (action === 'lookupMember') return ok_(lookupMember_(request));
     if (action === 'getOrder') return ok_(getOrder_(request));
     if (action === 'getOrders') return ok_(getOrders_(request));
     if (action === 'getCustomerOrders') return ok_(getCustomerOrders_(request));
@@ -421,10 +423,10 @@ function getCustomerOrders_(request) {
     .slice(0, 50)
     .map(function (order) { return Object.assign({}, order, { items: items.filter(function (item) { return String(item.OrderID) === String(order.OrderID); }) }); });
 }
-function createOrder_(request) {
+function createOrder_(request, byAdmin) {
   if (!request.order || !request.items || !request.items.length) throw new Error('ข้อมูลออเดอร์ไม่ครบ');
   const settings = settings_();
-  if (String(settings.AcceptingOrders).toUpperCase() === 'FALSE') throw new Error('ร้านปิดรับออเดอร์ชั่วคราว');
+  if (!byAdmin && String(settings.AcceptingOrders).toUpperCase() === 'FALSE') throw new Error('ร้านปิดรับออเดอร์ชั่วคราว');
   const lock = LockService.getScriptLock();
   lock.waitLock(30000);
   try {
@@ -451,6 +453,23 @@ function createOrder_(request) {
   } finally {
     lock.releaseLock();
   }
+}
+function createOrderByAdmin_(request) {
+  const admin = requireAdmin_(request.sessionToken);
+  const order = createOrder_(request, true);
+  try { log_(admin.ID, 'ADMIN_CREATE_ORDER', order.OrderID + ' · ' + (order.Phone || 'ไม่ระบุเบอร์') + ' · ' + number_(order.Total) + ' บาท'); } catch (error) { /* logging must not fail the order */ }
+  return order;
+}
+function lookupMember_(request) {
+  requireAdmin_(request.sessionToken);
+  const phone = phone_(request.phone);
+  if (!/^0\d{8,9}$/.test(phone)) return { exists: false, Phone: phone };
+  const user = userByPhone_(phone);
+  if (!user) return { exists: false, Phone: phone };
+  return {
+    exists: true, ID: user.ID, Phone: phone, Name: user.Name, Stamps: number_(user.Stamps),
+    Role: String(user.Role || 'Customer'), IsFirstOrder: ordersByUser_(user.ID).length === 0
+  };
 }
 function validateOrderOptions_(incoming) {
   const selections = Array.isArray(incoming) ? incoming : [];

@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { api, beep, isAdmin } from './api'
+import { api, beep, installBusyFeedback, isAdmin } from './api'
 import { Lightbox, WelcomeModal } from './components'
 import { CartScreen, CheckoutScreen, MenuScreen, OrderStatusScreen, ProfileScreen, StoreScreen } from './screens/Customer'
 import AdminScreen from './screens/Admin'
@@ -27,6 +27,7 @@ export default function App() {
   useEffect(() => {
     loadStore()
     if ('serviceWorker' in navigator) navigator.serviceWorker.register(import.meta.env.BASE_URL + 'sw.js').catch(() => {})
+    return installBusyFeedback()
   }, [])
   useEffect(() => { localStorage.setItem('dino-cart', JSON.stringify(cart)) }, [cart])
   useEffect(() => { if (user) localStorage.setItem('dino-user', JSON.stringify(user)); else localStorage.removeItem('dino-user') }, [user])
@@ -35,7 +36,7 @@ export default function App() {
     if (!order?.OrderID) return
     const timer = setInterval(async () => {
       try {
-        const fresh = await api('getOrder', { orderId: order.OrderID })
+        const fresh = await api('getOrder', { orderId: order.OrderID }, true)
         setOrder(fresh)
         if (previousStatus.current && previousStatus.current !== fresh.Status) {
           const delivery = fresh.OrderType === 'Delivery'
@@ -58,7 +59,7 @@ export default function App() {
   useEffect(() => {
     if (!chatOpen || !order?.OrderID) return
     const timer = setInterval(async () => {
-      try { setChat(await api('getChat', { orderId: order.OrderID, customerPhone: user?.Phone || order.Phone })) } catch { /* ignore */ }
+      try { setChat(await api('getChat', { orderId: order.OrderID, customerPhone: user?.Phone || order.Phone }, true)) } catch { /* ignore */ }
     }, 6000)
     return () => clearInterval(timer)
   }, [chatOpen, order?.OrderID])

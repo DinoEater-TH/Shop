@@ -1,10 +1,11 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import QRCode from 'qrcode'
-import { api, baht, beep, compressImage, driveImage, fmtTime, isNewItem, num, orderOptions } from '../api'
-import { ChatRoom, Empty, Field, MapPicker, StatusBadge } from '../components'
+import { api, baht, beep, compressImage, driveImage, fmtTime, isNewItem, num, orderOptions, promoOf } from '../api'
+import { ChatRoom, Empty, Field, MapPicker, Receipt, StatusBadge } from '../components'
 
 const TABS = [
   { key: 'orders', label: 'ออเดอร์' },
+  { key: 'pos', label: 'สั่งแทนลูกค้า' },
   { key: 'menu', label: 'เมนู' },
   { key: 'options', label: 'ตัวเลือกเสริม' },
   { key: 'promos', label: 'โปรโมชัน' },
@@ -28,6 +29,7 @@ export default function AdminScreen({ store, reloadStore, user, requireLogin }) 
     <h1>หน้าร้าน</h1>
     <div className="tabs">{TABS.map(item => <button key={item.key} className={tab === item.key ? 'active' : ''} onClick={() => setTab(item.key)}>{item.label}</button>)}</div>
     {tab === 'orders' && <AdminOrders token={token} store={store} />}
+    {tab === 'pos' && <AdminPos token={token} store={store} />}
     {tab === 'menu' && <AdminMenu token={token} reloadStore={reloadStore} />}
     {tab === 'options' && <AdminOptions token={token} />}
     {tab === 'promos' && <AdminPromos store={store} token={token} reloadStore={reloadStore} />}
@@ -53,7 +55,7 @@ function usePolling(loader, active, interval = 10000) {
 }
 
 function AdminOrders({ token, store }) {
-  const { data: orders, error, setData: setOrders } = usePolling(() => api('getOrders', { sessionToken: token }), !!token, 8000)
+  const { data: orders, error, setData: setOrders } = usePolling(() => api('getOrders', { sessionToken: token }, true), !!token, 8000)
   const seen = useRef(null)
   const [detail, setDetail] = useState(null)
   const [chatOrder, setChatOrder] = useState(null)
@@ -79,7 +81,7 @@ function AdminOrders({ token, store }) {
   useEffect(() => {
     if (!chatOrder) return
     let alive = true
-    const load = async () => { try { const result = await api('getChat', { orderId: chatOrder.OrderID, sessionToken: token }); if (alive) setChat(result) } catch { /* no chat yet */ } }
+    const load = async () => { try { const result = await api('getChat', { orderId: chatOrder.OrderID, sessionToken: token }, true); if (alive) setChat(result) } catch { /* no chat yet */ } }
     load()
     const timer = setInterval(load, 6000)
     return () => { alive = false; clearInterval(timer) }
@@ -528,6 +530,173 @@ function AdminLogs({ token, role }) {
       <small>{fmtTime(log.Timestamp)}</small>
     </article>)}
     {!logs.length && !error && <p className="hint">ยังไม่มีบันทึก</p>}
+  </div>
+}
+
+function AdminPos({ token, store }) {
+  const menu = (store.menu || []).filter(item => String(item.IsActive).toUpperCase() !== 'FALSE')
+  const optionGroups = store.options || []
+  const promos = store.promotions || []
+  const [cart, setCart] = useState({})
+  const [phone, setPhone] = useState('')
+  const [member, setMember] = useState(null)
+  const [checked, setChecked] = useState(false)
+  const [checking, setChecking] = useState(false)
+  const [query, setQuery] = useState('')
+  const [form, setForm] = useState({ orderType: 'Pickup', paymentMethod: 'Cash', address: '', deliveryFee: '', redeem: false })
+  const [selection, setSelection] = useState({})
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const [done, setDone] = useState(null)
+
+  const rows = menu.map(item => ({ item, qty: num(cart[item.ID]) })).filter(row => row.qty > 0)
+  const subtotal = rows.reduce((sum, row) => sum + num(row.item.Price) * row.qty, 0)
+  const deliveryFee = form.orderType === 'Delivery' ? Math.max(0, num(form.deliveryFee)) : 0
+
+  function freeItemValue(promo) {
+    if (!promo || !promo.FreeMenuID) return 0
+    const row = rows.find(entry => String(entry.item.ID) === String(promo.FreeMenuID))
+    return row ? num(row.item.Price) : 0
+  }
+  const lines = []
+  const memberPromo = promoOf(promos, 'NewMember')
+  if (member && member.IsFirstOrder && memberPromo) lines.push({ label: 'สมาชิกใหม่', value: num(memberPromo.DiscountValue) + freeItemValue(memberPromo) })
+  const bankPromo = promoOf(promos, 'MobileBanking')
+  if (form.paymentMethod === 'Transfer' && bankPromo) lines.push({ label: 'ส่วนลดโอนเงิน', value: num(bankPromo.DiscountValue) + freeItemValue(bankPromo) })
+  const reward = promoOf(promos, 'StampReward')
+  const canRedeem = !!member && !!reward && num(member.Stamps) >= num(reward.Condition)
+  if (form.redeem && canRedeem) lines.push({ label: `แลก ${num(reward.Condition)} แสตมป์`, value: num(reward.DiscountValue) + freeItemValue(reward) })
+  const discount = Math.min(subtotal + deliveryFee, lines.reduce((sum, line) => sum + line.value, 0))
+  const total = Math.max(0, subtotal + deliveryFee - discount)
+
+  const filtered = menu.filter(item => !query.trim() || String(item.Name).toLowerCase().includes(query.trim().toLowerCase()))
+
+  function setQty(id, delta) {
+    setCart(current => ({ ...current, [id]: Math.max(0, num(current[id]) + delta) }))
+  }
+  async function checkMember() {
+    const digits = String(phone).replace(/\D/g, '')
+    setMember(null)
+    setChecked(false)
+    if (!digits) return
+    setChecking(true)
+    try {
+      const data = await api('lookupMember', { sessionToken: token, phone: digits })
+      setMember(data.exists ? data : null)
+      setChecked(true)
+      setError('')
+    } catch (lookupError) { setError(lookupError.message) } finally { setChecking(false) }
+  }
+  function toggleOption(group, label) {
+    setSelection(current => {
+      const picked = current[group.GroupID] || []
+      if (group.MultiSelect) return { ...current, [group.GroupID]: picked.includes(label) ? picked.filter(item => item !== label) : picked.concat(label) }
+      return { ...current, [group.GroupID]: picked.includes(label) ? [] : [label] }
+    })
+  }
+  function reset() {
+    setCart({}); setPhone(''); setMember(null); setChecked(false); setQuery(''); setSelection({}); setError(''); setDone(null)
+    setForm({ orderType: 'Pickup', paymentMethod: 'Cash', address: '', deliveryFee: '', redeem: false })
+  }
+  async function submit() {
+    const items = rows.map(row => ({ menuId: row.item.ID, quantity: row.qty, price: num(row.item.Price) }))
+    if (!items.length) return setError('กรุณาเลือกรายการอาหารอย่างน้อย 1 รายการ')
+    const digits = String(phone).replace(/\D/g, '')
+    if (digits && !/^0\d{8,9}$/.test(digits)) return setError('เบอร์โทรศัพท์ไม่ถูกต้อง หรือเว้นว่างเพื่อไม่ระบุเบอร์')
+    if (form.orderType === 'Delivery' && !form.address.trim()) return setError('กรุณาระบุที่อยู่จัดส่ง')
+    const missing = optionGroups.filter(group => group.Required && !(selection[group.GroupID] || []).length)
+    if (missing.length) return setError(`กรุณาเลือก: ${missing.map(group => group.Name).join(', ')}`)
+    setError(''); setBusy(true)
+    try {
+      const order = await api('createOrderByAdmin', {
+        sessionToken: token,
+        order: {
+          phone: digits, orderType: form.orderType, addressDetail: form.address,
+          deliveryFee, paymentMethod: form.paymentMethod,
+          subTotal: subtotal, discount, total,
+          redeemStamps: form.redeem && canRedeem,
+          options: optionGroups.map(group => ({ groupId: group.GroupID, groupName: group.Name, choices: selection[group.GroupID] || [] })).filter(group => group.choices.length)
+        },
+        items
+      })
+      setDone(order)
+      setCart({}); setPhone(''); setMember(null); setChecked(false); setSelection({})
+      setForm(current => ({ ...current, redeem: false }))
+    } catch (submitError) { setError(submitError.message) } finally { setBusy(false) }
+  }
+
+  return <div>
+    <div className="row-between"><h2>สร้างออเดอร์แทนลูกค้า</h2></div>
+    <p className="hint">สำหรับลูกค้าที่ลืมมือถือหรือสแกน QR ไม่ได้ — เลือกเมนูและจำนวนให้ แล้วระบุเบอร์สมาชิก (ไม่บังคับ) เพื่อรับสิทธิพิเศษ</p>
+    {done && <div className="receipt pos-done">
+      <div><span>สร้างออเดอร์แล้ว</span><b>{done.OrderID}</b></div>
+      <div><span>เบอร์ลูกค้า</span><b>{done.Phone || 'ไม่ระบุ'}</b></div>
+      <div><span>ยอดสุทธิ</span><b>{baht(done.Total)}</b></div>
+      <button className="ghost" onClick={() => setDone(null)}>ปิด</button>
+    </div>}
+
+    <Field label="เบอร์โทรศัพท์สมาชิก (ไม่บังคับ)" hint={member ? `${member.Name || 'สมาชิก'} · ${num(member.Stamps)} แสตมป์${member.Role !== 'Customer' ? ' · ' + member.Role : ''}` : (checked ? 'ไม่พบสมาชิก — จะบันทึกเป็นลูกค้าทั่วไป' : (phone.replace(/\D/g, '') ? 'กด "ตรวจสอบ" เพื่อค้นหาสมาชิก' : 'เว้นว่างได้ ถ้าลูกค้าไม่ได้เป็นสมาชิก'))}>
+      <div className="pos-phone">
+        <input value={phone} inputMode="tel" placeholder="08x-xxx-xxxx" onChange={event => { setPhone(event.target.value); setMember(null); setChecked(false) }} onBlur={checkMember} />
+        <button className="ghost compact" disabled={checking} onClick={checkMember}>{checking ? 'กำลังค้นหา...' : 'ตรวจสอบ'}</button>
+      </div>
+    </Field>
+
+    <div className="choice">
+      <button className={form.orderType === 'Pickup' ? 'selected' : ''} onClick={() => setForm({ ...form, orderType: 'Pickup' })}>รับหน้าร้าน</button>
+      <button className={form.orderType === 'Delivery' ? 'selected' : ''} onClick={() => setForm({ ...form, orderType: 'Delivery' })}>ให้ร้านไปส่ง</button>
+    </div>
+    {form.orderType === 'Delivery' && <>
+      <Field label="รายละเอียดที่อยู่"><input value={form.address} onChange={event => setForm({ ...form, address: event.target.value })} placeholder="บ้านเลขที่ / จุดสังเกต" /></Field>
+      <Field label="ค่าจัดส่ง (บาท)"><input value={form.deliveryFee} inputMode="numeric" onChange={event => setForm({ ...form, deliveryFee: event.target.value.replace(/[^\d.]/g, '') })} placeholder="0" /></Field>
+    </>}
+
+    <div className="choice">
+      <button className={form.paymentMethod === 'Cash' ? 'selected' : ''} onClick={() => setForm({ ...form, paymentMethod: 'Cash' })}>เงินสด</button>
+      <button className={form.paymentMethod === 'Transfer' ? 'selected' : ''} onClick={() => setForm({ ...form, paymentMethod: 'Transfer' })}>โอนเงิน</button>
+    </div>
+
+    <Field label="ค้นหาเมนู"><input value={query} onChange={event => setQuery(event.target.value)} placeholder="ชื่อเมนู" /></Field>
+    <div className="menu-grid pos-grid">{filtered.map(item => <article className="food-card admin-card" key={item.ID}>
+      <div className="food-image">{item.ImageURL ? <img src={driveImage(item.ImageURL, 400)} alt={item.Name} loading="lazy" /> : '🍢'}</div>
+      <div className="food-body">
+        <h3>{item.Name}</h3>
+        <div className="food-foot"><strong>{baht(item.Price)}</strong><span className="stock">{String(item.Stock).toUpperCase() === 'UNLIMITED' ? 'ไม่จำกัด' : `เหลือ ${num(item.Stock)}`}</span></div>
+        <div className="stepper pos-stepper">
+          <button onClick={() => setQty(item.ID, -1)} disabled={!num(cart[item.ID])}>−</button>
+          <b>{num(cart[item.ID])}</b>
+          <button onClick={() => setQty(item.ID, 1)}>+</button>
+        </div>
+      </div>
+    </article>)}</div>
+    {!filtered.length && <Empty text="ไม่พบเมนู" />}
+
+    {rows.length > 0 && <div className="cart-list">
+      {rows.map(row => <div className="cart-row" key={row.item.ID}><div className="emoji">🍢</div><div><b>{row.item.Name}</b><small>{row.qty} × {baht(row.item.Price)}</small></div><b>{baht(num(row.item.Price) * row.qty)}</b></div>)}
+    </div>}
+
+    {optionGroups.length > 0 && <div className="pos-options">
+      <h3>ตัวเลือกเสริม</h3>
+      {optionGroups.map(group => <div className="option-group" key={group.GroupID}>
+        <div className="option-head">
+          <b>{group.Name}{group.Required ? ' *' : ''}</b>
+          <small>{group.MultiSelect ? 'เลือกได้หลายอย่าง' : 'เลือกได้อย่างเดียว'}{group.Required ? ' · ต้องเลือก' : ' · ไม่บังคับ'}</small>
+        </div>
+        <div className="option-choices">
+          {group.choices.map(choice => {
+            const active = (selection[group.GroupID] || []).includes(choice.Label)
+            return <button key={choice.ChoiceID} className={active ? 'selected' : ''} onClick={() => toggleOption(group, choice.Label)}>{choice.Label}</button>
+          })}
+        </div>
+      </div>)}
+    </div>}
+
+    {canRedeem && <label className="checkline"><input type="checkbox" checked={form.redeem} onChange={event => setForm({ ...form, redeem: event.target.checked })} /><span>ใช้ {num(reward.Condition)} แสตมป์แลกส่วนลด {baht(reward.DiscountValue)} (มี {num(member.Stamps)} แสตมป์)</span></label>}
+
+    <Receipt subtotal={subtotal} deliveryFee={deliveryFee} discount={discount} total={total} lines={lines} />
+    {error && <p className="hint error">{error}</p>}
+    <button className="primary" disabled={busy || !rows.length} onClick={submit}>{busy ? 'กำลังสร้างออเดอร์...' : 'สร้างออเดอร์'}</button>
+    <button className="ghost" onClick={reset}>ล้างรายการ</button>
   </div>
 }
 

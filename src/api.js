@@ -1,12 +1,57 @@
 const API_URL = import.meta.env.VITE_API_URL || ''
 export const SITE_URL = import.meta.env.BASE_URL || '/'
 
-export async function api(action, data = {}) {
+let inflight = 0
+let lastApiAt = 0
+const touchActivity = () => { lastApiAt = Date.now() }
+
+export async function api(action, data = {}, background = false) {
   if (!API_URL) throw new Error('ยังไม่ได้ตั้งค่า VITE_API_URL')
-  const response = await fetch(API_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action, ...data }) })
-  const json = await response.json()
-  if (!json.ok) throw new Error(json.error || 'เกิดข้อผิดพลาด')
-  return json.data
+  if (!background) { touchActivity(); inflight += 1 }
+  try {
+    const response = await fetch(API_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action, ...data }) })
+    const json = await response.json()
+    if (!json.ok) throw new Error(json.error || 'เกิดข้อผิดพลาด')
+    return json.data
+  } finally {
+    if (!background) { inflight = Math.max(0, inflight - 1); touchActivity() }
+  }
+}
+
+export function installBusyFeedback() {
+  if (typeof document === 'undefined') return () => {}
+  let active = null
+  let timer = 0
+
+  const release = () => {
+    clearTimeout(timer)
+    timer = 0
+    if (!active) return
+    active.removeAttribute('data-busy')
+    active.classList.remove('btn-busy')
+    active = null
+  }
+
+  const idle = () => inflight === 0 && Date.now() - lastApiAt >= 200
+
+  const onPress = event => {
+    const button = event.target && event.target.closest ? event.target.closest('button') : null
+    if (!button) return
+    if (button.hasAttribute('data-busy')) { event.stopPropagation(); event.preventDefault(); return }
+    release()
+    active = button
+    button.setAttribute('data-busy', '1')
+    button.classList.add('btn-busy')
+    const started = Date.now()
+    const tick = () => {
+      if (Date.now() - started >= 200 && idle()) { release(); return }
+      timer = setTimeout(tick, 60)
+    }
+    timer = setTimeout(tick, 60)
+  }
+
+  document.addEventListener('click', onPress, true)
+  return () => { document.removeEventListener('click', onPress, true); release() }
 }
 
 export const num = value => { const result = Number(value); return Number.isFinite(result) ? result : 0 }
@@ -103,6 +148,9 @@ export function beep(times = 3) {
 export function compressImage(file, maxSize = 1280, quality = 0.8) {
   return new Promise((resolve, reject) => {
     if (!file) return resolve('')
+    touchActivity()
+    const heartbeat = setInterval(touchActivity, 120)
+    const finish = (fn, value) => { clearInterval(heartbeat); fn(value) }
     const reader = new FileReader()
     reader.onload = () => {
       const image = new Image()
@@ -113,12 +161,12 @@ export function compressImage(file, maxSize = 1280, quality = 0.8) {
         canvas.width = width
         canvas.height = height
         canvas.getContext('2d').drawImage(image, 0, 0, width, height)
-        resolve(canvas.toDataURL('image/webp', quality))
+        finish(resolve, canvas.toDataURL('image/webp', quality))
       }
-      image.onerror = () => reject(new Error('อ่านรูปไม่สำเร็จ'))
+      image.onerror = () => finish(reject, new Error('อ่านรูปไม่สำเร็จ'))
       image.src = reader.result
     }
-    reader.onerror = () => reject(new Error('อ่านไฟล์ไม่สำเร็จ'))
+    reader.onerror = () => finish(reject, new Error('อ่านไฟล์ไม่สำเร็จ'))
     reader.readAsDataURL(file)
   })
 }
