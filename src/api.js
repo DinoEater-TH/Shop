@@ -66,6 +66,11 @@ export const isNewItem = item => {
 }
 export const fmtTime = value => value ? new Date(value).toLocaleString('th-TH', { dateStyle: 'short', timeStyle: 'short' }) : '-'
 
+const CACHE_PFX = 'dino-cache:'
+export function readCache(key) { try { const raw = localStorage.getItem(CACHE_PFX + key); if (!raw) return null; return JSON.parse(raw) } catch { return null } }
+export function writeCache(key, data) { try { localStorage.setItem(CACHE_PFX + key, data != null ? JSON.stringify(data) : '') } catch { /* quota */ } }
+export function clearCache(key) { try { localStorage.removeItem(CACHE_PFX + key) } catch { /* ignore */ } }
+
 export function orderOptions(order) {
   try {
     const raw = order?.Options

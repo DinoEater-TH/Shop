@@ -1,42 +1,66 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { api, beep, installBusyFeedback, isAdmin } from './api'
+import { api, beep, clearCache, installBusyFeedback, isAdmin, readCache, writeCache } from './api'
 import { Lightbox, WelcomeModal } from './components'
 import { CartScreen, CheckoutScreen, MenuScreen, OrderStatusScreen, ProfileScreen, StoreScreen } from './screens/Customer'
 import AdminScreen from './screens/Admin'
 
 const DEFAULT_STORE = { settings: {}, menu: [], promotions: [], popular: [] }
 
+function staleOrder(cached) {
+  if (!cached?.OrderID) return true
+  const terminal = ['Completed', 'Cancelled']
+  const then = new Date(cached.CreatedAt || 0).getTime()
+  if (!then || Date.now() - then > 12 * 60 * 60 * 1000) return true
+  if (terminal.includes(cached.Status) && Date.now() - new Date(cached.CompletedAt || cached.CreatedAt || 0).getTime() > 60 * 60 * 1000) return true
+  return false
+}
+
 export default function App() {
   const [screen, setScreen] = useState('menu')
-  const [store, setStore] = useState(DEFAULT_STORE)
+  const [store, setStore] = useState(() => readCache('store') || DEFAULT_STORE)
   const [cart, setCart] = useState(() => JSON.parse(localStorage.getItem('dino-cart') || '[]'))
   const [user, setUser] = useState(() => JSON.parse(localStorage.getItem('dino-user') || 'null'))
-  const [order, setOrder] = useState(null)
+  const previousStatus = useRef(null)
+  const [order, setOrder] = useState(() => {
+    const cached = readCache('active-order')
+    if (!cached || staleOrder(cached)) return null
+    previousStatus.current = cached.Status
+    return cached
+  })
   const [notice, setNotice] = useState('')
   const [lightbox, setLightbox] = useState(null)
   const [chatOpen, setChatOpen] = useState(false)
   const [chat, setChat] = useState(null)
   const [welcome, setWelcome] = useState(() => !localStorage.getItem('dino-welcome') && !localStorage.getItem('dino-user'))
   const [profileInit, setProfileInit] = useState(null)
-  const previousStatus = useRef(null)
 
   async function loadStore() {
-    try { setStore(await api('getStore')) } catch (loadError) { setNotice(loadError.message) }
+    try {
+      const data = await api('getStore')
+      writeCache('store', data)
+      setStore(data)
+    } catch (loadError) {
+      if (!readCache('store')) setNotice(loadError.message)
+    }
   }
 
   useEffect(() => {
     loadStore()
+    if ('storage' in navigator && navigator.storage?.persist) navigator.storage.persist().catch(() => {})
     if ('serviceWorker' in navigator) navigator.serviceWorker.register(import.meta.env.BASE_URL + 'sw.js').catch(() => {})
     return installBusyFeedback()
   }, [])
   useEffect(() => { localStorage.setItem('dino-cart', JSON.stringify(cart)) }, [cart])
   useEffect(() => { if (user) localStorage.setItem('dino-user', JSON.stringify(user)); else localStorage.removeItem('dino-user') }, [user])
+  useEffect(() => { if (order?.OrderID) writeCache('active-order', order); else clearCache('active-order') }, [order])
 
   useEffect(() => {
     if (!order?.OrderID) return
-    const timer = setInterval(async () => {
+    let alive = true
+    async function poll() {
       try {
         const fresh = await api('getOrder', { orderId: order.OrderID }, true)
+        if (!alive) return
         setOrder(fresh)
         if (previousStatus.current && previousStatus.current !== fresh.Status) {
           const delivery = fresh.OrderType === 'Delivery'
@@ -52,8 +76,10 @@ export default function App() {
         }
         previousStatus.current = fresh.Status
       } catch { /* ignore */ }
-    }, 12000)
-    return () => clearInterval(timer)
+    }
+    poll()
+    const timer = setInterval(poll, 12000)
+    return () => { alive = false; clearInterval(timer) }
   }, [order?.OrderID])
 
   useEffect(() => {

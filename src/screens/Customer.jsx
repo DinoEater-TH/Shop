@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { api, baht, compressImage, deliveryFeeFor, distanceKm, driveImage, fmtTime, isNewItem, num, orderOptions, promoOf, storeDirectionsUrl } from '../api'
+import { api, baht, compressImage, deliveryFeeFor, distanceKm, driveImage, fmtTime, isNewItem, num, orderOptions, promoOf, readCache, storeDirectionsUrl, writeCache } from '../api'
 import { ChatRoom, Empty, Field, MapPicker, QueueTimer, Receipt, StatusBadge, StoreMap } from '../components'
 
 export function MenuScreen({ store, menu, popular = [], addItem, onLightbox, onProfile, user }) {
@@ -297,7 +297,9 @@ export function ProfileScreen({ user, onUser, onBack, store, onReorder, init }) 
 
   useEffect(() => {
     if (!user) return
-    api('getCustomerOrders', { phone: user.Phone }).then(setHistory).catch(() => setHistory([]))
+    const cached = readCache('orders:' + user.Phone)
+    if (cached) setHistory(cached)
+    api('getCustomerOrders', { phone: user.Phone }).then(data => { writeCache('orders:' + user.Phone, data); setHistory(data) }).catch(() => { if (!cached) setHistory([]) })
   }, [user?.ID, user?.Phone])
 
   async function login() {
