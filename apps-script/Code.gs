@@ -6,10 +6,11 @@ const SESSION_SECONDS = 21600;
 const TABLES = {
   Settings: ['Key', 'Value'],
   Users: ['ID', 'Phone', 'PIN', 'Name', 'ProfilePic', 'Role', 'Stamps', 'CreatedAt', 'Address', 'Lat', 'Lng'],
-  Menu: ['ID', 'Name', 'Description', 'Price', 'ImageURL', 'Stock', 'IsActive', 'NewAt'],
+  Menu: ['ID', 'Name', 'NameEn', 'NameZh', 'Description', 'DescriptionEn', 'DescriptionZh', 'Price', 'ImageURL', 'Stock', 'IsActive', 'NewAt', 'CategoryID'],
   Orders: ['OrderID', 'UserID', 'Phone', 'OrderType', 'AddressDetail', 'Lat', 'Lng', 'Distance', 'DeliveryFee', 'PaymentMethod', 'SubTotal', 'Discount', 'Total', 'Status', 'SlipURL', 'EstimatedTime', 'CreatedAt', 'CompletedAt', 'StampEarned', 'StartedAt', 'QueuePosition', 'Options'],
   OrderItems: ['ID', 'OrderID', 'MenuID', 'Quantity', 'Price'],
   Promotions: ['PromoType', 'Condition', 'DiscountValue', 'FreeMenuID', 'IsActive'],
+  Categories: ['CategoryID', 'ParentID', 'Name', 'NameEn', 'NameZh', 'SortOrder', 'IsActive'],
   OptionGroups: ['GroupID', 'Name', 'Required', 'MultiSelect', 'SortOrder', 'IsActive'],
   OptionChoices: ['ChoiceID', 'GroupID', 'Label', 'SortOrder', 'IsActive'],
   ChatDisputes: ['ChatID', 'OrderID', 'SenderRole', 'Message', 'Timestamp', 'Status'],
@@ -55,6 +56,9 @@ function dispatch_(request) {
     if (action === 'createOrder') return ok_(createOrder_(request));
     if (action === 'createOrderByAdmin') return ok_(createOrderByAdmin_(request));
     if (action === 'lookupMember') return ok_(lookupMember_(request));
+    if (action === 'getCategories') return ok_(getCategories_(request));
+    if (action === 'saveCategory') return ok_(saveCategory_(request));
+    if (action === 'deleteCategory') return ok_(deleteCategory_(request));
     if (action === 'getOrder') return ok_(getOrder_(request));
     if (action === 'getOrders') return ok_(getOrders_(request));
     if (action === 'getCustomerOrders') return ok_(getCustomerOrders_(request));
@@ -286,7 +290,9 @@ function getStore_() {
   const settings = settings_();
   const menu = rows_('Menu').filter(function (row) { return String(row.IsActive).toUpperCase() !== 'FALSE'; });
   const promos = rows_('Promotions').filter(function (row) { return String(row.IsActive).toUpperCase() !== 'FALSE'; });
-  return { settings: settings, menu: menu, promotions: promos, options: optionGroups_(true), popular: popularItems_(6, menu) };
+  let categories = [];
+  try { categories = rows_('Categories').filter(function (row) { return String(row.IsActive).toUpperCase() !== 'FALSE'; }); } catch (error) { categories = []; }
+  return { settings: settings, menu: menu, promotions: promos, options: optionGroups_(true), categories: categories, popular: popularItems_(6, menu) };
 }
 function popularItems_(limit, menu) {
   const cancelled = {};
@@ -312,6 +318,46 @@ function popularItems_(limit, menu) {
 }
 function getMenu_(request) { if (request.sessionToken) requireAdmin_(request.sessionToken); return rows_('Menu'); }
 function getPromotions_() { return rows_('Promotions'); }
+
+/* ---------- categories ---------- */
+function getCategories_(request) {
+  requireAdmin_(request.sessionToken);
+  return rows_('Categories');
+}
+function saveCategory_(request) {
+  const admin = requireAdmin_(request.sessionToken);
+  const category = request.category || {};
+  const name = String(category.Name || '').trim();
+  if (!name) throw new Error('กรุณาระบุชื่อหมวดหมู่');
+  const parentId = String(category.ParentID || '');
+  if (category.CategoryID && parentId === String(category.CategoryID)) throw new Error('หมวดหมู่ไม่สามารถเป็นหมวดแม่ของตัวเอง');
+  const all = rows_('Categories');
+  if (parentId && !all.some(function (row) { return String(row.CategoryID) === parentId; })) throw new Error('ไม่พบหมวดหมู่หลัก');
+  const record = {
+    CategoryID: category.CategoryID || 'C' + Date.now(),
+    ParentID: parentId,
+    Name: name,
+    NameEn: String(category.NameEn || '').trim(),
+    NameZh: String(category.NameZh || '').trim(),
+    SortOrder: number_(category.SortOrder),
+    IsActive: String(category.IsActive).toUpperCase() === 'FALSE' ? 'FALSE' : 'TRUE'
+  };
+  const existing = all.some(function (row) { return String(row.CategoryID) === String(record.CategoryID); });
+  if (existing) updateRow_('Categories', 'CategoryID', record.CategoryID, record); else append_('Categories', record);
+  log_(admin.ID, existing ? 'CATEGORY_UPDATE' : 'CATEGORY_CREATE', record.Name);
+  return rows_('Categories');
+}
+function deleteCategory_(request) {
+  const admin = requireAdmin_(request.sessionToken);
+  const id = String(request.categoryId || '');
+  if (!id) throw new Error('ไม่ระบุหมวดหมู่');
+  const children = rows_('Categories').filter(function (row) { return String(row.ParentID) === id; });
+  if (children.length) throw new Error('กรุณาลบหรือย้ายหมวดหมู่รองก่อน');
+  rows_('Menu').filter(function (row) { return String(row.CategoryID) === id; }).forEach(function (row) { updateRow_('Menu', 'ID', row.ID, { CategoryID: '' }); });
+  deleteRow_('Categories', 'CategoryID', id);
+  log_(admin.ID, 'CATEGORY_DELETE', id);
+  return rows_('Categories');
+}
 
 /* ---------- option groups (ตัวเลือกเสริม) ---------- */
 function optionGroups_(activeOnly) {
@@ -530,12 +576,17 @@ function saveMenu_(request) {
   const record = {
     ID: item.ID || 'M' + Date.now(),
     Name: item.Name,
+    NameEn: item.NameEn || '',
+    NameZh: item.NameZh || '',
     Description: item.Description || '',
+    DescriptionEn: item.DescriptionEn || '',
+    DescriptionZh: item.DescriptionZh || '',
     Price: number_(item.Price),
     ImageURL: image || item.ImageURL || '',
     Stock: item.Stock === '' || item.Stock === undefined ? 'Unlimited' : item.Stock,
     IsActive: String(item.IsActive).toLowerCase() === 'false' ? 'FALSE' : 'TRUE',
-    NewAt: newAt && !isNaN(newAt.getTime()) ? newAt : ''
+    NewAt: newAt && !isNaN(newAt.getTime()) ? newAt : '',
+    CategoryID: item.CategoryID || ''
   };
   if (item.ID) updateRow_('Menu', 'ID', item.ID, record); else append_('Menu', record);
   log_(admin.ID, item.ID ? 'MENU_UPDATE' : 'MENU_CREATE', record.Name);

@@ -2,17 +2,19 @@ import React, { useEffect, useMemo, useRef, useState } from 'react'
 import QRCode from 'qrcode'
 import { api, baht, beep, compressImage, driveImage, fmtTime, isNewItem, num, orderOptions, promoOf } from '../api'
 import { ChatRoom, Empty, Field, MapPicker, Receipt, StatusBadge } from '../components'
+import { t } from '../i18n'
 
 const TABS = [
-  { key: 'orders', label: 'ออเดอร์' },
-  { key: 'pos', label: 'สั่งแทนลูกค้า' },
-  { key: 'menu', label: 'เมนู' },
-  { key: 'options', label: 'ตัวเลือกเสริม' },
-  { key: 'promos', label: 'โปรโมชัน' },
-  { key: 'users', label: 'สมาชิก' },
-  { key: 'settings', label: 'ตั้งค่า' },
-  { key: 'logs', label: 'บันทึกการทำงาน' },
-  { key: 'qr', label: 'QR code' }
+  { key: 'orders', label: t('ออเดอร์') },
+  { key: 'pos', label: t('สั่งแทนลูกค้า') },
+  { key: 'menu', label: t('เมนู') },
+  { key: 'categories', label: t('หมวดหมู่') },
+  { key: 'options', label: t('ตัวเลือกเสริม') },
+  { key: 'promos', label: t('โปรโมชัน') },
+  { key: 'users', label: t('สมาชิก') },
+  { key: 'settings', label: t('ตั้งค่า') },
+  { key: 'logs', label: t('บันทึกการทำงาน') },
+  { key: 'qr', label: t('QR code') }
 ]
 
 export default function AdminScreen({ store, reloadStore, user, requireLogin }) {
@@ -30,7 +32,8 @@ export default function AdminScreen({ store, reloadStore, user, requireLogin }) 
     <div className="tabs">{TABS.map(item => <button key={item.key} className={tab === item.key ? 'active' : ''} onClick={() => setTab(item.key)}>{item.label}</button>)}</div>
     {tab === 'orders' && <AdminOrders token={token} store={store} />}
     {tab === 'pos' && <AdminPos token={token} store={store} />}
-    {tab === 'menu' && <AdminMenu token={token} reloadStore={reloadStore} />}
+    {tab === 'menu' && <AdminMenu token={token} reloadStore={reloadStore} categories={store.categories || []} />}
+    {tab === 'categories' && <AdminCategories token={token} reloadStore={reloadStore} categories={store.categories || []} />}
     {tab === 'options' && <AdminOptions token={token} />}
     {tab === 'promos' && <AdminPromos store={store} token={token} reloadStore={reloadStore} />}
     {tab === 'users' && <AdminUsers token={token} role={user.Role} />}
@@ -200,7 +203,7 @@ function AdminOrderDetail({ order, onClose, onAdvance, onChat }) {
   </div>
 }
 
-function AdminMenu({ token, reloadStore }) {
+function AdminMenu({ token, reloadStore, categories }) {
   const [items, setItems] = useState([])
   const [draft, setDraft] = useState(null)
   const [error, setError] = useState('')
@@ -241,12 +244,21 @@ function AdminMenu({ token, reloadStore }) {
   }
 
   return <div>
-      <div className="row-between"><h2>จัดการเมนู</h2><button className="primary compact" onClick={() => setDraft({ Name: '', Description: '', Price: 0, Stock: 'Unlimited', IsActive: 'TRUE', NewAt: '' })}>+ เพิ่มเมนู</button></div>
+      <div className="row-between"><h2>จัดการเมนู</h2><button className="primary compact" onClick={() => setDraft({ Name: '', Description: '', Price: 0, Stock: 'Unlimited', IsActive: 'TRUE', NewAt: '', CategoryID: '' })}>+ เพิ่มเมนู</button></div>
     {error && <p className="hint error">{error}</p>}
     {draft && <div className="card">
       <Field label="ชื่อเมนู"><input value={draft.Name} onChange={event => setDraft({ ...draft, Name: event.target.value })} /></Field>
       <Field label="รายละเอียด"><input value={draft.Description} onChange={event => setDraft({ ...draft, Description: event.target.value })} /></Field>
       <Field label="ราคา (บาท)"><input type="number" value={draft.Price} onChange={event => setDraft({ ...draft, Price: event.target.value })} /></Field>
+      <Field label="หมวดหมู่">
+        <select value={draft.CategoryID || ''} onChange={event => setDraft({ ...draft, CategoryID: event.target.value })}>
+          <option value="">-- ไม่จัดหมวด --</option>
+          {categories.filter(c => !c.ParentID).map(main => <React.Fragment key={main.CategoryID}>
+            <option value={main.CategoryID}>{main.Name}</option>
+            {categories.filter(c => String(c.ParentID) === String(main.CategoryID)).map(sub => <option key={sub.CategoryID} value={sub.CategoryID}>&nbsp;&nbsp;└ {sub.Name}</option>)}
+          </React.Fragment>)}
+        </select>
+      </Field>
       <Field label="จำนวนคงเหลือ" hint="ใส่ Unlimited หากไม่จำกัด"><input value={draft.Stock} onChange={event => setDraft({ ...draft, Stock: event.target.value })} /></Field>
       <Field label="รูปอาหาร">
         <input type="file" accept="image/*" onChange={event => compressImage(event.target.files[0], 1600, 0.85).then(imageBase64 => setDraft({ ...draft, imageBase64 }))} />
@@ -709,5 +721,84 @@ function AdminQr() {
     {image ? <img src={image} alt="QR" /> : <p className="hint">สร้าง QR ไม่สำเร็จ</p>}
     <p className="hint">{url}</p>
     <button className="secondary" onClick={() => window.print()}>พิมพ์ QR</button>
+  </div>
+}
+
+function AdminCategories({ token, reloadStore, categories }) {
+  const [list, setList] = useState([])
+  const [draft, setDraft] = useState(null)
+  const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  const load = async () => {
+    try { setList(await api('getCategories', { sessionToken: token })); setError('') }
+    catch (e) { setError(e.message) }
+  }
+  useEffect(() => { load() }, [token])
+
+  const mains = list.filter(c => !c.ParentID)
+  function subs(pid) { return list.filter(c => String(c.ParentID) === String(pid)) }
+
+  async function save() {
+    setBusy(true)
+    try {
+      await api('saveCategory', { sessionToken: token, category: draft })
+      setDraft(null)
+      await load()
+      await reloadStore()
+    } catch (e) { setError(e.message) } finally { setBusy(false) }
+  }
+
+  async function remove(id) {
+    if (!confirm('ลบหมวดหมู่?')) return
+    try { await api('deleteCategory', { sessionToken: token, categoryId: id }); await load(); await reloadStore() }
+    catch (e) { setError(e.message) }
+  }
+
+  function edit(cat) { setDraft({ ...cat }) }
+
+  return <div>
+    <div className="row-between"><h2>จัดการหมวดหมู่</h2>
+      <div className="row-actions">
+        <button className="primary compact" onClick={() => setDraft({ ParentID: '', Name: '', NameEn: '', NameZh: '', SortOrder: 0, IsActive: 'TRUE' })}>+ เพิ่มหมวดหลัก</button>
+        <button className="secondary compact" onClick={() => setDraft({ ParentID: mains.length ? mains[0].CategoryID : '', Name: '', NameEn: '', NameZh: '', SortOrder: 0, IsActive: 'TRUE' })}>+ เพิ่มหมวดรอง</button>
+      </div>
+    </div>
+    {error && <p className="hint error">{error}</p>}
+
+    {draft && <div className="card">
+      <Field label="ชื่อหมวดหมู่"><input value={draft.Name} onChange={e => setDraft({ ...draft, Name: e.target.value })} /></Field>
+      <Field label="ชื่ออังกฤษ"><input value={draft.NameEn} onChange={e => setDraft({ ...draft, NameEn: e.target.value })} /></Field>
+      <Field label="ชื่อจีน"><input value={draft.NameZh} onChange={e => setDraft({ ...draft, NameZh: e.target.value })} /></Field>
+      <Field label="หมวดหลัก">
+        <select value={draft.ParentID || ''} onChange={e => setDraft({ ...draft, ParentID: e.target.value })}>
+          <option value="">-- หมวดหลัก (ไม่มีหมวดแม่) --</option>
+          {mains.filter(m => String(m.CategoryID) !== String(draft.CategoryID)).map(m => <option key={m.CategoryID} value={m.CategoryID}>{m.Name}</option>)}
+        </select>
+      </Field>
+      <Field label="ลำดับ"><input type="number" value={draft.SortOrder} onChange={e => setDraft({ ...draft, SortOrder: e.target.value })} /></Field>
+      <label className="checkline"><input type="checkbox" checked={String(draft.IsActive).toUpperCase() !== 'FALSE'} onChange={e => setDraft({ ...draft, IsActive: e.target.checked ? 'TRUE' : 'FALSE' })} /><span>เปิดใช้งาน</span></label>
+      <div className="row-actions"><button className="primary" disabled={busy} onClick={save}>{busy ? 'กำลังบันทึก...' : 'บันทึก'}</button><button className="ghost" onClick={() => setDraft(null)}>ยกเลิก</button></div>
+    </div>}
+
+    {mains.map(main => <div className="category-block" key={main.CategoryID}>
+      <div className="category-head">
+        <b>{main.Name}</b>
+        <div className="row-actions">
+          <button className="ghost compact" onClick={() => edit(main)}>แก้ไข</button>
+          <button className="ghost compact" onClick={() => remove(main.CategoryID)}>ลบ</button>
+        </div>
+      </div>
+      {subs(main.CategoryID).length > 0 && <div className="sub-list">
+        {subs(main.CategoryID).map(sub => <div className="category-head sub" key={sub.CategoryID}>
+          <span>└ {sub.Name}</span>
+          <div className="row-actions">
+            <button className="ghost compact" onClick={() => edit(sub)}>แก้ไข</button>
+            <button className="ghost compact" onClick={() => remove(sub.CategoryID)}>ลบ</button>
+          </div>
+        </div>)}
+      </div>}
+    </div>)}
+    {!list.length && !error && <p className="hint">ยังไม่มีหมวดหมู่ — กด "เพิ่มหมวดหลัก" เพื่อเริ่มต้น</p>}
   </div>
 }

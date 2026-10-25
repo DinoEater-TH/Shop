@@ -3,6 +3,7 @@ import { api, beep, clearCache, installBusyFeedback, isAdmin, readCache, writeCa
 import { Lightbox, WelcomeModal } from './components'
 import { CartScreen, CheckoutScreen, MenuScreen, OrderStatusScreen, ProfileScreen, StoreScreen } from './screens/Customer'
 import AdminScreen from './screens/Admin'
+import { getLang, setLang, LANGUAGES, t } from './i18n'
 
 const DEFAULT_STORE = { settings: {}, menu: [], promotions: [], popular: [] }
 
@@ -65,11 +66,11 @@ export default function App() {
         if (previousStatus.current && previousStatus.current !== fresh.Status) {
           const delivery = fresh.OrderType === 'Delivery'
           const messages = {
-            Accepted: `ร้านรับออเดอร์แล้ว กำลังทำประมาณ ${fresh.EstimatedTime || 10} นาที`,
-            Ready: delivery ? 'อาหารพร้อมแล้ว กำลังเตรียมจัดส่ง' : 'อาหารพร้อมแล้ว รับได้ที่ร้าน',
-            OutForDelivery: 'กำลังดำเนินการจัดส่ง',
-            Completed: 'ออเดอร์เสร็จสิ้น ขอบคุณที่ใช้บริการ',
-            Cancelled: 'ออเดอร์ถูกยกเลิก'
+            Accepted: t('ร้านรับออเดอร์แล้ว กำลังทำประมาณ {minutes} นาที', { minutes: fresh.EstimatedTime || 10 }),
+            Ready: delivery ? t('อาหารพร้อมแล้ว กำลังเตรียมจัดส่ง') : t('อาหารพร้อมแล้ว รับได้ที่ร้าน'),
+            OutForDelivery: t('กำลังดำเนินการจัดส่ง'),
+            Completed: t('ออเดอร์เสร็จสิ้น ขอบคุณที่ใช้บริการ'),
+            Cancelled: t('ออเดอร์ถูกยกเลิก')
           }
           setNotice(messages[fresh.Status] || `ออเดอร์ ${fresh.OrderID}: ${fresh.Status}`)
           beep(2)
@@ -96,14 +97,14 @@ export default function App() {
       if (found) return current.map(row => row.ID === item.ID ? { ...row, quantity: row.quantity + 1 } : row)
       return [...current, { ...item, quantity: 1 }]
     })
-    setNotice(`เพิ่ม ${item.Name} ลงตะกร้า`)
+    setNotice(t('เพิ่ม {name} ลงตะกร้า', { name: item.Name }))
   }
   function updateQuantity(id, quantity) {
     setCart(current => quantity < 1 ? current.filter(row => row.ID !== id) : current.map(row => row.ID === id ? { ...row, quantity } : row))
   }
   function reorder(order) {
     const lines = (order.items || []).map(item => store.menu.find(menuItem => String(menuItem.ID) === String(item.MenuID))).filter(Boolean)
-    if (!lines.length) { setNotice('เมนูในอดีตไม่พร้อมจำหน่ายแล้ว'); return }
+    if (!lines.length) { setNotice(t('เมนูในอดีตไม่พร้อมจำหน่ายแล้ว')); return }
     setCart(current => {
       let next = current.slice()
       lines.forEach(line => {
@@ -112,13 +113,13 @@ export default function App() {
       })
       return next
     })
-    setNotice('เพิ่มรายการเดิมลงตะกร้าแล้ว')
+    setNotice(t('เพิ่มรายการเดิมลงตะกร้าแล้ว'))
     setScreen('cart')
   }
   function handleRegistered(registered) {
     setUser(registered)
     if (order?.OrderID) api('getOrder', { orderId: order.OrderID }).then(setOrder).catch(() => {})
-    setNotice('ลงทะเบียนสำเร็จ เริ่มสะสมแสตมป์ได้แล้ว')
+    setNotice(t('ลงทะเบียนสำเร็จ เริ่มสะสมแสตมป์ได้แล้ว'))
   }
   const cartCount = cart.reduce((sum, item) => sum + item.quantity, 0)
 
@@ -140,7 +141,7 @@ export default function App() {
     setUser(member)
     setWelcome(false)
     if (order?.OrderID) api('getOrder', { orderId: order.OrderID }).then(setOrder).catch(() => {})
-    setNotice(`ยินดีต้อนรับ ${member.Name || member.Phone}`)
+    setNotice(t('ยินดีต้อนรับ {name}', { name: member.Name || member.Phone }))
   }
   function handleWelcomeGuest() {
     localStorage.setItem('dino-welcome', 'done')
@@ -157,8 +158,9 @@ export default function App() {
     <header>
       <button className="brand" onClick={() => setScreen('menu')}>DINO<span>EATER</span></button>
       <div className="header-actions">
-        {isAdmin(user) && <button className="ghost" onClick={() => setScreen('admin')}>หน้าร้าน</button>}
-        <button className="cart-button" onClick={() => setScreen('cart')}>ตะกร้า <b>{cartCount}</b></button>
+        {LANGUAGES.map(lang => <button key={lang.code} className={`lang-switch${getLang() === lang.code ? ' active' : ''}`} onClick={() => setLang(lang.code)}>{lang.label}</button>)}
+        {isAdmin(user) && <button className="ghost" onClick={() => setScreen('admin')}>{t('หน้าร้าน')}</button>}
+        <button className="cart-button" onClick={() => setScreen('cart')}>{t('ตะกร้า')} <b>{cartCount}</b></button>
       </div>
     </header>
     {notice && <div className="notice">{notice}<button onClick={() => setNotice('')}>×</button></div>}
@@ -173,12 +175,12 @@ export default function App() {
     {welcome && !user && <WelcomeModal onMember={handleWelcomeMember} onGuest={handleWelcomeGuest} onAdmin={handleWelcomeAdmin} />}
 
     <nav>
-      <button onClick={() => setScreen('menu')}>เมนู</button>
-      <button onClick={() => setScreen('order')}>ออเดอร์</button>
-      <button onClick={() => setScreen('cart')}>ตะกร้า {cartCount > 0 && `(${cartCount})`}</button>
-      <button onClick={() => setScreen('store')}>ที่ตั้งร้าน</button>
-      <button onClick={() => setScreen('profile')}>บัญชี</button>
-      {isAdmin(user) && <button onClick={() => setScreen('admin')}>ร้านค้า</button>}
+      <button onClick={() => setScreen('menu')}>{t('เมนู')}</button>
+      <button onClick={() => setScreen('order')}>{t('ออเดอร์')}</button>
+      <button onClick={() => setScreen('cart')}>{t('ตะกร้า')} {cartCount > 0 && `(${cartCount})`}</button>
+      <button onClick={() => setScreen('store')}>{t('ที่ตั้งร้าน')}</button>
+      <button onClick={() => setScreen('profile')}>{t('บัญชี')}</button>
+      {isAdmin(user) && <button onClick={() => setScreen('admin')}>{t('ร้านค้า')}</button>}
     </nav>
 
     {lightbox && <Lightbox list={lightbox.list} index={lightbox.index} onStep={delta => setLightbox(current => current ? { ...current, index: (current.index + delta + current.list.length) % current.list.length } : current)} onClose={() => setLightbox(null)} onAdd={addItem} menu={store.menu} />}

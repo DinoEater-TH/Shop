@@ -6,6 +6,16 @@ export function MenuScreen({ store, menu, popular = [], addItem, onLightbox, onP
   const gallery = menu.filter(item => item.ImageURL).map(item => ({ ID: item.ID, id: item.ID, src: driveImage(item.ImageURL, 1600), title: item.Name }))
   const openLightbox = item => { const index = gallery.findIndex(row => String(row.ID) === String(item.ID)); if (index >= 0) onLightbox(gallery, index) }
   const logo = store?.settings?.StoreLogo ? driveImage(store.settings.StoreLogo, 400) : ''
+  const categories = store.categories || []
+  const catMap = {}
+  categories.forEach(c => { catMap[c.CategoryID] = c })
+  const grouped = {}
+  menu.forEach(item => {
+    const catId = item.CategoryID || '__none__'
+    if (!grouped[catId]) grouped[catId] = []
+    grouped[catId].push(item)
+  })
+  const catOrder = categories.filter(c => !c.ParentID).sort((a, b) => num(a.SortOrder) - num(b.SortOrder))
   return <section>
     <div className="hero">
       {logo && <img className="hero-logo" src={logo} alt="logo" onClick={onProfile} />}
@@ -33,25 +43,79 @@ export function MenuScreen({ store, menu, popular = [], addItem, onLightbox, onP
         </article>)}
       </div>
     </>}
-    <div className="section-title"><h2>เมนูแนะนำ</h2><small>{gallery.length ? 'แตะรูปเพื่อดูเต็มจอ' : ''}</small></div>
-      <div className="menu-grid">
-      {menu.map(item => <article className="food-card" key={item.ID}>
-        {isNewItem(item) && <span className="new-badge">New · อยากให้ลอง</span>}
-        <div className={`food-image${item.ImageURL ? ' zoomable' : ''}`} onClick={() => openLightbox(item)}>
-          {item.ImageURL ? <img src={driveImage(item.ImageURL, 600)} alt={item.Name} loading="lazy" /> : '🍢'}
+    {catOrder.map(main => {
+      const subCats = categories.filter(c => String(c.ParentID) === String(main.CategoryID)).sort((a, b) => num(a.SortOrder) - num(b.SortOrder))
+      const mainItems = grouped[main.CategoryID] || []
+      const subGrouped = {}
+      subCats.forEach(sub => { const items = grouped[sub.CategoryID] || []; if (items.length) subGrouped[sub.CategoryID] = items })
+      const subItems = Object.values(subGrouped).flat()
+      if (!mainItems.length && !subItems.length && main.CategoryID !== '__none__') return null
+      return <div key={main.CategoryID}>
+        <div className="section-title"><h2>{main.Name}</h2></div>
+        <div className="menu-grid">
+          {mainItems.map(item => <article className="food-card" key={item.ID}>
+            {isNewItem(item) && <span className="new-badge">New · อยากให้ลอง</span>}
+            <div className={`food-image${item.ImageURL ? ' zoomable' : ''}`} onClick={() => openLightbox(item)}>
+              {item.ImageURL ? <img src={driveImage(item.ImageURL, 600)} alt={item.Name} loading="lazy" /> : '🍢'}
+            </div>
+            <div className="food-body">
+              <h3>{item.Name}</h3>
+              <p>{item.Description}</p>
+              <div className="food-foot">
+                <strong>{baht(item.Price)}</strong>
+                <span className="stock">{String(item.Stock).toUpperCase() === 'UNLIMITED' ? 'มีจำหน่าย' : `เหลือ ${item.Stock}`}</span>
+              </div>
+              <button className="add" onClick={() => addItem(item)}>+</button>
+            </div>
+          </article>)}
         </div>
-        <div className="food-body">
-          <h3>{item.Name}</h3>
-          <p>{item.Description}</p>
-          <div className="food-foot">
-            <strong>{baht(item.Price)}</strong>
-            <span className="stock">{String(item.Stock).toUpperCase() === 'UNLIMITED' ? 'มีจำหน่าย' : `เหลือ ${item.Stock}`}</span>
+        {subCats.map(sub => {
+          const subItemsList = grouped[sub.CategoryID] || []
+          if (!subItemsList.length) return null
+          return <div key={sub.CategoryID}>
+            <div className="section-title sub"><h3>{sub.Name}</h3></div>
+            <div className="menu-grid">
+              {subItemsList.map(item => <article className="food-card" key={item.ID}>
+                  {isNewItem(item) && <span className="new-badge">New · อยากให้ลอง</span>}
+                  <div className={`food-image${item.ImageURL ? ' zoomable' : ''}`} onClick={() => openLightbox(item)}>
+                    {item.ImageURL ? <img src={driveImage(item.ImageURL, 600)} alt={item.Name} loading="lazy" /> : '🍢'}
+                  </div>
+                  <div className="food-body">
+                    <h3>{item.Name}</h3>
+                    <p>{item.Description}</p>
+                    <div className="food-foot">
+                      <strong>{baht(item.Price)}</strong>
+                      <span className="stock">{String(item.Stock).toUpperCase() === 'UNLIMITED' ? 'มีจำหน่าย' : `เหลือ ${item.Stock}`}</span>
+                    </div>
+                    <button className="add" onClick={() => addItem(item)}>+</button>
+                  </div>
+                </article>)}
+            </div>
           </div>
-          <button className="add" onClick={() => addItem(item)}>+</button>
-        </div>
-      </article>)}
-      {!menu.length && <Empty text="ร้านยังไม่เพิ่มเมนู" />}
-    </div>
+        })}
+      </div>
+    })}
+    {grouped['__none__'] && grouped['__none__'].length > 0 && <div>
+      <div className="section-title"><h2>อื่นๆ</h2></div>
+      <div className="menu-grid">
+        {grouped['__none__'].map(item => <article className="food-card" key={item.ID}>
+          {isNewItem(item) && <span className="new-badge">New · อยากให้ลอง</span>}
+          <div className={`food-image${item.ImageURL ? ' zoomable' : ''}`} onClick={() => openLightbox(item)}>
+            {item.ImageURL ? <img src={driveImage(item.ImageURL, 600)} alt={item.Name} loading="lazy" /> : '🍢'}
+          </div>
+          <div className="food-body">
+            <h3>{item.Name}</h3>
+            <p>{item.Description}</p>
+            <div className="food-foot">
+              <strong>{baht(item.Price)}</strong>
+              <span className="stock">{String(item.Stock).toUpperCase() === 'UNLIMITED' ? 'มีจำหน่าย' : `เหลือ ${item.Stock}`}</span>
+            </div>
+            <button className="add" onClick={() => addItem(item)}>+</button>
+          </div>
+        </article>)}
+      </div>
+    </div>}
+    {!menu.length && <Empty text="ร้านยังไม่เพิ่มเมนู" />}
   </section>
 }
 
