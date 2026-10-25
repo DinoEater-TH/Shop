@@ -2,6 +2,19 @@ import React, { useEffect, useState } from 'react'
 import { api, baht, compressImage, deliveryFeeFor, distanceKm, driveImage, fmtTime, isNewItem, num, orderOptions, promoOf, readCache, storeDirectionsUrl, writeCache } from '../api'
 import { ChatRoom, Empty, Field, MapPicker, QueueTimer, Receipt, StatusBadge, StoreMap } from '../components'
 
+function stockStatus(item) {
+  if (item.StockStatus === 'SoldOutDaily') return { label: 'หมดวันนี้', cls: 'soldout-daily' }
+  if (item.StockStatus === 'SoldOutPermanent') return { label: 'หมดไม่มีกำหนด', cls: 'soldout-permanent' }
+  if (item.StockStatus === 'Hidden') return { label: 'ซ่อน', cls: 'hidden' }
+  return null
+}
+function canAdd(item) { return !stockStatus(item) }
+function StockBadge({ item }) {
+  const s = stockStatus(item)
+  if (!s) return null
+  return <span className={`stock-badge ${s.cls}`}>{s.label}</span>
+}
+
 export function MenuScreen({ store, menu, popular = [], addItem, onLightbox, onProfile, user }) {
   const gallery = menu.filter(item => item.ImageURL).map(item => ({ ID: item.ID, id: item.ID, src: driveImage(item.ImageURL, 1600), title: item.Name }))
   const openLightbox = item => { const index = gallery.findIndex(row => String(row.ID) === String(item.ID)); if (index >= 0) onLightbox(gallery, index) }
@@ -29,6 +42,7 @@ export function MenuScreen({ store, menu, popular = [], addItem, onLightbox, onP
         {popular.map((item, index) => <article className="popular-card" key={item.ID}>
           <span className={`popular-rank${index === 0 ? ' top' : ''}`}>#{index + 1}</span>
           {isNewItem(item) && <span className="new-badge">New · อยากให้ลอง</span>}
+          <StockBadge item={item} />
           <div className={`popular-image${item.ImageURL ? ' zoomable' : ''}`} onClick={() => openLightbox(item)}>
             {item.ImageURL ? <img src={driveImage(item.ImageURL, 400)} alt={item.Name} loading="lazy" /> : '🍢'}
           </div>
@@ -37,7 +51,9 @@ export function MenuScreen({ store, menu, popular = [], addItem, onLightbox, onP
             <small className="popular-sold">ขายแล้ว {num(item.Sold)} ชิ้น</small>
             <div className="popular-foot">
               <strong>{baht(item.Price)}</strong>
-              <button className="add" onClick={() => addItem(item)}>+</button>
+              {canAdd(item)
+                ? <button className="add" onClick={() => addItem(item)}>+</button>
+                : <span className="add disabled">×</span>}
             </div>
           </div>
         </article>)}
@@ -55,6 +71,7 @@ export function MenuScreen({ store, menu, popular = [], addItem, onLightbox, onP
         <div className="menu-grid">
           {mainItems.map(item => <article className="food-card" key={item.ID}>
             {isNewItem(item) && <span className="new-badge">New · อยากให้ลอง</span>}
+            <StockBadge item={item} />
             <div className={`food-image${item.ImageURL ? ' zoomable' : ''}`} onClick={() => openLightbox(item)}>
               {item.ImageURL ? <img src={driveImage(item.ImageURL, 600)} alt={item.Name} loading="lazy" /> : '🍢'}
             </div>
@@ -63,9 +80,13 @@ export function MenuScreen({ store, menu, popular = [], addItem, onLightbox, onP
               <p>{item.Description}</p>
               <div className="food-foot">
                 <strong>{baht(item.Price)}</strong>
-                <span className="stock">{String(item.Stock).toUpperCase() === 'UNLIMITED' ? 'มีจำหน่าย' : `เหลือ ${item.Stock}`}</span>
+                {stockStatus(item)
+                  ? <span className={`stock-badge ${stockStatus(item).cls}`}>{stockStatus(item).label}</span>
+                  : <span className="stock">{String(item.Stock).toUpperCase() === 'UNLIMITED' ? 'มีจำหน่าย' : `เหลือ ${item.Stock}`}</span>}
               </div>
-              <button className="add" onClick={() => addItem(item)}>+</button>
+              {canAdd(item)
+                ? <button className="add" onClick={() => addItem(item)}>+</button>
+                : <span className="add disabled">×</span>}
             </div>
           </article>)}
         </div>
@@ -77,6 +98,7 @@ export function MenuScreen({ store, menu, popular = [], addItem, onLightbox, onP
             <div className="menu-grid">
               {subItemsList.map(item => <article className="food-card" key={item.ID}>
                   {isNewItem(item) && <span className="new-badge">New · อยากให้ลอง</span>}
+                  <StockBadge item={item} />
                   <div className={`food-image${item.ImageURL ? ' zoomable' : ''}`} onClick={() => openLightbox(item)}>
                     {item.ImageURL ? <img src={driveImage(item.ImageURL, 600)} alt={item.Name} loading="lazy" /> : '🍢'}
                   </div>
@@ -85,9 +107,13 @@ export function MenuScreen({ store, menu, popular = [], addItem, onLightbox, onP
                     <p>{item.Description}</p>
                     <div className="food-foot">
                       <strong>{baht(item.Price)}</strong>
-                      <span className="stock">{String(item.Stock).toUpperCase() === 'UNLIMITED' ? 'มีจำหน่าย' : `เหลือ ${item.Stock}`}</span>
+                      {stockStatus(item)
+                        ? <span className={`stock-badge ${stockStatus(item).cls}`}>{stockStatus(item).label}</span>
+                        : <span className="stock">{String(item.Stock).toUpperCase() === 'UNLIMITED' ? 'มีจำหน่าย' : `เหลือ ${item.Stock}`}</span>}
                     </div>
-                    <button className="add" onClick={() => addItem(item)}>+</button>
+                    {canAdd(item)
+                      ? <button className="add" onClick={() => addItem(item)}>+</button>
+                      : <span className="add disabled">×</span>}
                   </div>
                 </article>)}
             </div>
@@ -100,6 +126,7 @@ export function MenuScreen({ store, menu, popular = [], addItem, onLightbox, onP
       <div className="menu-grid">
         {grouped['__none__'].map(item => <article className="food-card" key={item.ID}>
           {isNewItem(item) && <span className="new-badge">New · อยากให้ลอง</span>}
+          <StockBadge item={item} />
           <div className={`food-image${item.ImageURL ? ' zoomable' : ''}`} onClick={() => openLightbox(item)}>
             {item.ImageURL ? <img src={driveImage(item.ImageURL, 600)} alt={item.Name} loading="lazy" /> : '🍢'}
           </div>
@@ -108,9 +135,13 @@ export function MenuScreen({ store, menu, popular = [], addItem, onLightbox, onP
             <p>{item.Description}</p>
             <div className="food-foot">
               <strong>{baht(item.Price)}</strong>
-              <span className="stock">{String(item.Stock).toUpperCase() === 'UNLIMITED' ? 'มีจำหน่าย' : `เหลือ ${item.Stock}`}</span>
+              {stockStatus(item)
+                ? <span className={`stock-badge ${stockStatus(item).cls}`}>{stockStatus(item).label}</span>
+                : <span className="stock">{String(item.Stock).toUpperCase() === 'UNLIMITED' ? 'มีจำหน่าย' : `เหลือ ${item.Stock}`}</span>}
             </div>
-            <button className="add" onClick={() => addItem(item)}>+</button>
+            {canAdd(item)
+              ? <button className="add" onClick={() => addItem(item)}>+</button>
+              : <span className="add disabled">×</span>}
           </div>
         </article>)}
       </div>
@@ -343,7 +374,11 @@ export function CheckoutScreen({ cart, user, store, onOrderCreated, onStoreChang
   </section>
 }
 
-export function ProfileScreen({ user, onUser, onBack, store, onReorder, init }) {
+export function ProfileScreen({ user, onUser, onBack, onAuthSuccess, store, onReorder, init }) {
+  function finishAuth(data) {
+    if (onAuthSuccess) onAuthSuccess(data)
+    else { onUser(data); onBack() }
+  }
   const [phone, setPhone] = useState(init?.phone || user?.Phone || '')
   const [name, setName] = useState(user?.Name || '')
   const [register, setRegister] = useState(false)
@@ -375,22 +410,21 @@ export function ProfileScreen({ user, onUser, onBack, store, onReorder, init }) 
       if (data.exists === false) { setRegister(true); setError('ยังไม่มีบัญชีนี้ กรุณาสมัครสมาชิก'); return }
       if (data.needsPinSetup) { setAdminName(data.Name || ''); setPin(''); setConfirmPin(''); setStep('setup'); setError('บัญชีผู้ดูแล: กรุณาตั้งรหัส PIN สำหรับเข้าใช้งาน (จะใช้ทุกครั้งที่ล็อกอิน)'); return }
       if (data.requiresPin) { setAdminName(data.Name || ''); setPin(''); setStep('pin'); setError(''); return }
-      onUser(data)
-      onBack()
+      finishAuth(data)
     } catch (loginError) { setError(loginError.message) }
   }
   async function submitPin() {
     setError('')
     const digits = String(phone).replace(/\D/g, '')
     if (!/^\d{4,8}$/.test(String(pin))) return setError('รหัส PIN ต้องเป็นตัวเลข 4-8 หลัก')
-    try { const data = await api('login', { phone: digits, pin }); onUser(data); onBack() } catch (pinError) { setError(pinError.message) }
+    try { const data = await api('login', { phone: digits, pin }); finishAuth(data) } catch (pinError) { setError(pinError.message) }
   }
   async function submitSetup() {
     setError('')
     const digits = String(phone).replace(/\D/g, '')
     if (!/^\d{4,8}$/.test(String(pin))) return setError('รหัส PIN ต้องเป็นตัวเลข 4-8 หลัก')
     if (pin !== confirmPin) return setError('รหัส PIN ทั้งสองครั้งไม่ตรงกัน')
-    try { const data = await api('login', { phone: digits, pin }); onUser(data); onBack() } catch (setupError) { setError(setupError.message) }
+    try { const data = await api('login', { phone: digits, pin }); finishAuth(data) } catch (setupError) { setError(setupError.message) }
   }
   async function changePin() {
     setError('')

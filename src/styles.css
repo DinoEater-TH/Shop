@@ -31,7 +31,13 @@ header{height:64px;display:flex;align-items:center;justify-content:space-between
 .popular-foot{display:flex;justify-content:space-between;align-items:center;margin-top:4px;padding-right:32px}
 .popular-card strong{color:#d94823;font-size:14px}
 .popular-card .add{bottom:10px;right:8px;width:28px;height:28px;font-size:18px}
+.popular-card>.stock-badge{position:absolute;top:8px;left:8px;z-index:2;box-shadow:0 2px 6px #0003}
 .new-badge{position:absolute;top:8px;right:8px;z-index:2;background:#2e7d32;color:#fff;border-radius:999px;padding:3px 9px;font-size:10px;font-weight:600;pointer-events:none;box-shadow:0 2px 6px #0003}
+.stock-badge{display:inline-flex;align-items:center;justify-content:center;border-radius:999px;padding:3px 8px;font-size:10px;font-weight:700;white-space:nowrap}
+.food-card>.stock-badge{position:absolute;top:8px;left:8px;z-index:2;box-shadow:0 2px 6px #0003}
+.stock-badge.soldout-daily{background:#f59e0b;color:#422006}
+.stock-badge.soldout-permanent{background:#dc2626;color:#fff}
+.stock-badge.hidden{background:#475569;color:#fff}
 .food-card{background:#fff;border-radius:18px;overflow:hidden;box-shadow:0 4px 18px #371b0c0c;position:relative;display:flex;flex-direction:column}
 .food-image{height:118px;background:#ffead7;display:grid;place-items:center;font-size:54px;cursor:default}
 .food-image.zoomable{cursor:zoom-in}
@@ -43,6 +49,7 @@ header{height:64px;display:flex;align-items:center;justify-content:space-between
 .food-card strong{color:#d94823}
 .stock{font-size:11px;color:#9c8b81}
 .add{position:absolute;bottom:10px;right:10px;width:30px;height:30px;border:0;border-radius:50%;background:#29201c;color:#fff;font-size:20px;line-height:1;cursor:pointer}
+.add.disabled{display:grid;place-items:center;background:#b8afa9;color:#fff;cursor:not-allowed}
 .page{padding:18px}
 .page h1{margin:4px 0 12px;font-size:25px}
 .page h2{font-size:18px;margin:22px 0 8px}

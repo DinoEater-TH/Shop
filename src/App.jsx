@@ -17,10 +17,15 @@ function staleOrder(cached) {
 }
 
 export default function App() {
-  const [screen, setScreen] = useState('menu')
+  const [user, setUser] = useState(() => JSON.parse(localStorage.getItem('dino-user') || 'null'))
+  const [screen, setScreen] = useState(() => {
+    try {
+      const cached = JSON.parse(localStorage.getItem('dino-user') || 'null')
+      return isAdmin(cached) ? 'admin' : 'menu'
+    } catch { return 'menu' }
+  })
   const [store, setStore] = useState(() => readCache('store') || DEFAULT_STORE)
   const [cart, setCart] = useState(() => JSON.parse(localStorage.getItem('dino-cart') || '[]'))
-  const [user, setUser] = useState(() => JSON.parse(localStorage.getItem('dino-user') || 'null'))
   const previousStatus = useRef(null)
   const [order, setOrder] = useState(() => {
     const cached = readCache('active-order')
@@ -142,6 +147,12 @@ export default function App() {
     setWelcome(false)
     if (order?.OrderID) api('getOrder', { orderId: order.OrderID }).then(setOrder).catch(() => {})
     setNotice(t('ยินดีต้อนรับ {name}', { name: member.Name || member.Phone }))
+    if (isAdmin(member)) setScreen('admin')
+  }
+  function handleAuthSuccess(nextUser) {
+    setUser(nextUser)
+    setProfileInit(null)
+    setScreen(isAdmin(nextUser) ? 'admin' : 'menu')
   }
   function handleWelcomeGuest() {
     localStorage.setItem('dino-welcome', 'done')
@@ -169,7 +180,7 @@ export default function App() {
     {screen === 'store' && <StoreScreen store={store} user={user} onProfile={logoutOrLogin} />}
     {screen === 'cart' && <CartScreen cart={cart} updateQuantity={updateQuantity} onCheckout={() => setScreen('checkout')} onContinue={() => setScreen('menu')} />}
     {screen === 'checkout' && <CheckoutScreen cart={cart} user={user} store={store} onStoreChange={(_, nextUser) => nextUser && setUser({ ...user, ...nextUser })} onOrderCreated={created => { setCart([]); setChatOpen(false); previousStatus.current = created.Status; setOrder(created); setScreen('order') }} />}
-    {screen === 'profile' && <ProfileScreen user={user} onUser={setUser} onBack={() => { setProfileInit(null); setScreen('menu') }} store={store} onReorder={reorder} init={profileInit} />}
+    {screen === 'profile' && <ProfileScreen user={user} onUser={setUser} onAuthSuccess={handleAuthSuccess} onBack={() => { setProfileInit(null); setScreen(isAdmin(user) ? 'admin' : 'menu') }} store={store} onReorder={reorder} init={profileInit} />}
     {screen === 'order' && <OrderStatusScreen order={order} store={store} user={user} chatOpen={chatOpen} chat={chat} onOpenChat={openChat} onSend={sendChat} onMenu={() => { setChatOpen(false); setScreen('menu') }} onRegistered={handleRegistered} />}
     {screen === 'admin' && <AdminScreen store={store} reloadStore={loadStore} user={user} requireLogin={() => setScreen('profile')} />}
     {welcome && !user && <WelcomeModal onMember={handleWelcomeMember} onGuest={handleWelcomeGuest} onAdmin={handleWelcomeAdmin} />}

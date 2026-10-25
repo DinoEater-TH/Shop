@@ -18,7 +18,7 @@ const TABS = [
 ]
 
 export default function AdminScreen({ store, reloadStore, user, requireLogin }) {
-  const [tab, setTab] = useState('orders')
+  const [tab, setTab] = useState('pos')
   const token = user?.SessionToken
 
   if (!user || !['Admin', 'SuperAdmin'].includes(user.Role)) return <section className="page">
@@ -244,7 +244,7 @@ function AdminMenu({ token, reloadStore, categories }) {
   }
 
   return <div>
-      <div className="row-between"><h2>จัดการเมนู</h2><button className="primary compact" onClick={() => setDraft({ Name: '', Description: '', Price: 0, Stock: 'Unlimited', IsActive: 'TRUE', NewAt: '', CategoryID: '' })}>+ เพิ่มเมนู</button></div>
+      <div className="row-between"><h2>จัดการเมนู</h2><button className="primary compact" onClick={() => setDraft({ Name: '', Description: '', Price: 0, Stock: 'Unlimited', StockStatus: '', SoldOutDate: '', IsActive: 'TRUE', NewAt: '', CategoryID: '' })}>+ เพิ่มเมนู</button></div>
     {error && <p className="hint error">{error}</p>}
     {draft && <div className="card">
       <Field label="ชื่อเมนู"><input value={draft.Name} onChange={event => setDraft({ ...draft, Name: event.target.value })} /></Field>
@@ -259,7 +259,15 @@ function AdminMenu({ token, reloadStore, categories }) {
           </React.Fragment>)}
         </select>
       </Field>
-      <Field label="จำนวนคงเหลือ" hint="ใส่ Unlimited หากไม่จำกัด"><input value={draft.Stock} onChange={event => setDraft({ ...draft, Stock: event.target.value })} /></Field>
+      <Field label="สถานะสต็อก">
+        <select value={draft.StockStatus || ''} onChange={event => setDraft({ ...draft, StockStatus: event.target.value })}>
+          <option value="">มีจำหน่าย (ใช้จำนวนคงเหลือ)</option>
+          <option value="SoldOutDaily">หมด — reset อัตโนมัติวันต่อวัน</option>
+          <option value="SoldOutPermanent">หมดไม่มีกำหนด</option>
+          <option value="Hidden">ซ่อนจากลูกค้า</option>
+        </select>
+      </Field>
+      {(!draft.StockStatus || draft.StockStatus === '') && <Field label="จำนวนคงเหลือ" hint="ใส่ Unlimited หากไม่จำกัด"><input value={draft.Stock} onChange={event => setDraft({ ...draft, Stock: event.target.value })} /></Field>}
       <Field label="รูปอาหาร">
         <input type="file" accept="image/*" onChange={event => compressImage(event.target.files[0], 1600, 0.85).then(imageBase64 => setDraft({ ...draft, imageBase64 }))} />
         <button type="button" className="ghost compact" onClick={openDrive}>เลือกจาก Google Drive</button>
@@ -286,7 +294,12 @@ function AdminMenu({ token, reloadStore, categories }) {
       <div className="food-image" onClick={() => setDraft({ ...item })}>{item.ImageURL ? <img src={driveImage(item.ImageURL, 600)} alt={item.Name} loading="lazy" /> : '🍢'}</div>
       <div className="food-body">
         <h3>{item.Name}</h3>
-        <div className="food-foot"><strong>{baht(item.Price)}</strong><span className="stock">{String(item.Stock).toUpperCase() === 'UNLIMITED' ? 'ไม่จำกัด' : `เหลือ ${item.Stock}`}</span></div>
+        <div className="food-foot"><strong>{baht(item.Price)}</strong>
+          {item.StockStatus === 'SoldOutDaily' && <span className="stock-badge soldout-daily">หมดวันนี้</span>}
+          {item.StockStatus === 'SoldOutPermanent' && <span className="stock-badge soldout-permanent">หมดไม่มีกำหนด</span>}
+          {item.StockStatus === 'Hidden' && <span className="stock-badge hidden">ซ่อน</span>}
+          {(!item.StockStatus || item.StockStatus === '') && <span className="stock">{String(item.Stock).toUpperCase() === 'UNLIMITED' ? 'ไม่จำกัด' : `เหลือ ${item.Stock}`}</span>}
+        </div>
         <div className="row-actions">
           <button onClick={() => setDraft({ ...item })}>แก้ไข</button>
           {String(item.IsActive).toUpperCase() !== 'FALSE' && <button onClick={() => remove(item.ID)}>ปิดขาย</button>}

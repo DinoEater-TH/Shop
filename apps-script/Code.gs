@@ -6,7 +6,7 @@ const SESSION_SECONDS = 21600;
 const TABLES = {
   Settings: ['Key', 'Value'],
   Users: ['ID', 'Phone', 'PIN', 'Name', 'ProfilePic', 'Role', 'Stamps', 'CreatedAt', 'Address', 'Lat', 'Lng'],
-  Menu: ['ID', 'Name', 'NameEn', 'NameZh', 'Description', 'DescriptionEn', 'DescriptionZh', 'Price', 'ImageURL', 'Stock', 'IsActive', 'NewAt', 'CategoryID'],
+  Menu: ['ID', 'Name', 'NameEn', 'NameZh', 'Description', 'DescriptionEn', 'DescriptionZh', 'Price', 'ImageURL', 'Stock', 'StockStatus', 'SoldOutDate', 'IsActive', 'NewAt', 'CategoryID'],
   Orders: ['OrderID', 'UserID', 'Phone', 'OrderType', 'AddressDetail', 'Lat', 'Lng', 'Distance', 'DeliveryFee', 'PaymentMethod', 'SubTotal', 'Discount', 'Total', 'Status', 'SlipURL', 'EstimatedTime', 'CreatedAt', 'CompletedAt', 'StampEarned', 'StartedAt', 'QueuePosition', 'Options'],
   OrderItems: ['ID', 'OrderID', 'MenuID', 'Quantity', 'Price'],
   Promotions: ['PromoType', 'Condition', 'DiscountValue', 'FreeMenuID', 'IsActive'],
@@ -288,7 +288,16 @@ function getMemberDetail_(request) {
 /* ---------- store ---------- */
 function getStore_() {
   const settings = settings_();
-  const menu = rows_('Menu').filter(function (row) { return String(row.IsActive).toUpperCase() !== 'FALSE'; });
+  const today = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd');
+  var rawMenu = rows_('Menu');
+  rawMenu.forEach(function (row) {
+    if (String(row.StockStatus) === 'SoldOutDaily' && String(row.SoldOutDate) !== today && String(row.SoldOutDate) !== '') {
+      updateRow_('Menu', 'ID', row.ID, { StockStatus: '', SoldOutDate: '' });
+      row.StockStatus = '';
+      row.SoldOutDate = '';
+    }
+  });
+  const menu = rawMenu.filter(function (row) { return String(row.IsActive).toUpperCase() !== 'FALSE' && String(row.StockStatus) !== 'Hidden'; });
   const promos = rows_('Promotions').filter(function (row) { return String(row.IsActive).toUpperCase() !== 'FALSE'; });
   let categories = [];
   try { categories = rows_('Categories').filter(function (row) { return String(row.IsActive).toUpperCase() !== 'FALSE'; }); } catch (error) { categories = []; }
@@ -477,6 +486,19 @@ function createOrder_(request, byAdmin) {
   lock.waitLock(30000);
   try {
     const o = request.order;
+    const today = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd');
+    const menuById = {};
+    rows_('Menu').forEach(function (menu) {
+      if (String(menu.StockStatus) === 'SoldOutDaily' && String(menu.SoldOutDate) !== today && String(menu.SoldOutDate) !== '') {
+        updateRow_('Menu', 'ID', menu.ID, { StockStatus: '', SoldOutDate: '' });
+        menu.StockStatus = '';
+      }
+      menuById[String(menu.ID)] = menu;
+    });
+    request.items.forEach(function (item) {
+      const menu = menuById[String(item.menuId)];
+      if (!menu || String(menu.IsActive).toUpperCase() === 'FALSE' || ['SoldOutDaily', 'SoldOutPermanent', 'Hidden'].indexOf(String(menu.StockStatus)) >= 0) throw new Error('มีรายการอาหารที่ไม่พร้อมจำหน่าย กรุณาเลือกใหม่');
+    });
     const id = 'DE' + Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyyMMddHHmmss') + Math.floor(Math.random() * 100);
     const phone = phone_(o.phone);
     let userId = o.userId || '';
@@ -573,6 +595,9 @@ function saveMenu_(request) {
   if (!item.Name) throw new Error('กรุณาระบุชื่อเมนู');
   const image = item.imageBase64 ? uploadBase64_(item.imageBase64, 'menu-' + Utilities.getUuid() + '.jpg') : '';
   const newAt = item.NewAt ? new Date(item.NewAt) : null;
+  var stockStatus = String(item.StockStatus || '').trim();
+  var soldOutDate = '';
+  if (stockStatus === 'SoldOutDaily') soldOutDate = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd');
   const record = {
     ID: item.ID || 'M' + Date.now(),
     Name: item.Name,
@@ -584,6 +609,8 @@ function saveMenu_(request) {
     Price: number_(item.Price),
     ImageURL: image || item.ImageURL || '',
     Stock: item.Stock === '' || item.Stock === undefined ? 'Unlimited' : item.Stock,
+    StockStatus: stockStatus,
+    SoldOutDate: soldOutDate,
     IsActive: String(item.IsActive).toLowerCase() === 'false' ? 'FALSE' : 'TRUE',
     NewAt: newAt && !isNaN(newAt.getTime()) ? newAt : '',
     CategoryID: item.CategoryID || ''
