@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { api, baht, compressImage, deliveryFeeFor, distanceKm, driveImage, fmtTime, isNewItem, num, orderOptions, promoOf, readCache, storeDirectionsUrl, writeCache } from '../api'
 import { ChatRoom, Empty, Field, MapPicker, QueueTimer, Receipt, StatusBadge, StoreMap } from '../components'
+import { t, useLang } from '../i18n'
 
 function stockStatus(item) {
   if (item.StockStatus === 'SoldOutDaily') return { label: 'หมดวันนี้', cls: 'soldout-daily' }
@@ -16,6 +17,7 @@ function StockBadge({ item }) {
 }
 
 export function MenuScreen({ store, menu, popular = [], addItem, onLightbox, onProfile, user }) {
+  useLang()
   const gallery = menu.filter(item => item.ImageURL).map(item => ({ ID: item.ID, id: item.ID, src: driveImage(item.ImageURL, 1600), title: item.Name }))
   const openLightbox = item => { const index = gallery.findIndex(row => String(row.ID) === String(item.ID)); if (index >= 0) onLightbox(gallery, index) }
   const logo = store?.settings?.StoreLogo ? driveImage(store.settings.StoreLogo, 400) : ''
@@ -32,12 +34,12 @@ export function MenuScreen({ store, menu, popular = [], addItem, onLightbox, onP
   return <section>
     <div className="hero">
       {logo && <img className="hero-logo" src={logo} alt="logo" onClick={onProfile} />}
-      <p>ทอดใหม่ทุกออเดอร์</p>
-      <h1>หิวเมื่อไร<br />ให้ DinoEater ดูแล</h1>
-      <button onClick={onProfile}>{user ? `${user.Name} · ${num(user.Stamps)} แสตมป์` : 'เข้าสู่ระบบสมาชิก'}</button>
+      <p>{t('ทอดใหม่ทุกออเดอร์')}</p>
+      <h1>{t('หิวเมื่อไร')}<br />{t('ให้ DinoEater ดูแล')}</h1>
+      <button onClick={onProfile}>{user ? `${user.Name} · ${num(user.Stamps)} ${t('แสตมป์')}` : t('เข้าสู่ระบบสมาชิก')}</button>
     </div>
     {popular.length > 0 && <>
-      <div className="section-title"><h2>🔥 สินค้ายอดนิยม</h2><small>อันดับขายดีจากออเดอร์จริง</small></div>
+      <div className="section-title"><h2>{t('สินค้าขายดี')}</h2><small>{t('อันดับขายดีจากออเดอร์จริง')}</small></div>
       <div className="popular-row">
         {popular.map((item, index) => <article className="popular-card" key={item.ID}>
           <span className={`popular-rank${index === 0 ? ' top' : ''}`}>#{index + 1}</span>
@@ -545,7 +547,7 @@ function RegisterAfterOrder({ order, onRegistered }) {
   </div>
 }
 
-export function OrderStatusScreen({ order, store, user, onOpenChat, chatOpen, chat, onChat, onSend, onResolve, onMenu, onRegistered }) {
+export function OrderStatusScreen({ order, store, user, onOpenChat, chatOpen, chat, onChat, onSend, onResolve, onMenu, onRegistered, onConfirmReceived }) {
   if (!order) return <section className="page"><Empty text="ยังไม่มีออเดอร์ล่าสุด" action="สั่งอาหาร" onAction={onMenu} /></section>
   const settings = store.settings || {}
   const delivery = order.OrderType === 'Delivery'
@@ -559,7 +561,9 @@ export function OrderStatusScreen({ order, store, user, onOpenChat, chatOpen, ch
     ? new Date((startAt || new Date(order.CreatedAt)).getTime() + num(order.EstimatedTime) * 60000)
     : null
   const disputeMinutes = num(settings.DisputeMinutes)
-  const canReport = order.Status === 'Completed' && order.CompletedAt && disputeMinutes > 0 && (new Date().getTime() - new Date(order.CompletedAt).getTime()) / 60000 <= disputeMinutes
+  const receivedAt = order.ReceivedAt ? new Date(order.ReceivedAt).getTime() : 0
+  const canReport = order.Status === 'Completed' && receivedAt > 0 && disputeMinutes > 0 && (Date.now() - receivedAt) / 60000 <= disputeMinutes
+  const canConfirm = order.Status === 'Completed' && !order.ReceivedAt
   const headline = {
     Pending: 'รอร้านยืนยันออเดอร์',
     Accepted: 'ร้านกำลังทำอาหาร',

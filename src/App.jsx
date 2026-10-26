@@ -1,9 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { api, beep, clearCache, installBusyFeedback, isAdmin, readCache, writeCache } from './api'
+import { api, beep, clearCache, driveImage, installBusyFeedback, isAdmin, readCache, writeCache } from './api'
 import { Lightbox, WelcomeModal } from './components'
 import { CartScreen, CheckoutScreen, MenuScreen, OrderStatusScreen, ProfileScreen, StoreScreen } from './screens/Customer'
 import AdminScreen from './screens/Admin'
-import { getLang, setLang, LANGUAGES, t } from './i18n'
+import { getLang, setLang, LANGUAGES, t, useLang } from './i18n'
 
 const DEFAULT_STORE = { settings: {}, menu: [], promotions: [], popular: [] }
 
@@ -17,6 +17,7 @@ function staleOrder(cached) {
 }
 
 export default function App() {
+  const currentLang = useLang()
   const [user, setUser] = useState(() => JSON.parse(localStorage.getItem('dino-user') || 'null'))
   const [screen, setScreen] = useState(() => {
     try {
@@ -25,6 +26,7 @@ export default function App() {
     } catch { return 'menu' }
   })
   const [store, setStore] = useState(() => readCache('store') || DEFAULT_STORE)
+  const storeSettings = store?.settings || {}
   const [cart, setCart] = useState(() => JSON.parse(localStorage.getItem('dino-cart') || '[]'))
   const previousStatus = useRef(null)
   const [order, setOrder] = useState(() => {
@@ -39,6 +41,8 @@ export default function App() {
   const [chat, setChat] = useState(null)
   const [welcome, setWelcome] = useState(() => !localStorage.getItem('dino-welcome') && !localStorage.getItem('dino-user'))
   const [profileInit, setProfileInit] = useState(null)
+  const [langOpen, setLangOpen] = useState(false)
+  const langRef = useRef(null)
 
   async function loadStore() {
     try {
@@ -56,6 +60,7 @@ export default function App() {
     if ('serviceWorker' in navigator) navigator.serviceWorker.register(import.meta.env.BASE_URL + 'sw.js').catch(() => {})
     return installBusyFeedback()
   }, [])
+  useEffect(() => { function handle(e) { if (langRef.current && !langRef.current.contains(e.target)) setLangOpen(false) }; document.addEventListener('mousedown', handle); return () => document.removeEventListener('mousedown', handle) }, [])
   useEffect(() => { localStorage.setItem('dino-cart', JSON.stringify(cart)) }, [cart])
   useEffect(() => { if (user) localStorage.setItem('dino-user', JSON.stringify(user)); else localStorage.removeItem('dino-user') }, [user])
   useEffect(() => { if (order?.OrderID) writeCache('active-order', order); else clearCache('active-order') }, [order])
@@ -167,10 +172,22 @@ export default function App() {
 
   return <div className="app-shell">
     <header>
-      <button className="brand" onClick={() => setScreen('menu')}>DINO<span>EATER</span></button>
+      <button className="brand" onClick={() => setScreen('menu')}>
+        {storeSettings.StoreLogo ? (
+          <img className="brand-logo" src={driveImage(storeSettings.StoreLogo, 80)} alt="" />
+        ) : null}
+        {storeSettings.StoreName && storeSettings.StoreName.toLowerCase() !== 'dinoeater' ? (
+          <span>{storeSettings.StoreName}</span>
+        ) : (
+          <span>DINO<span className="brand-highlight">EATER</span></span>
+        )}
+      </button>
       <div className="header-actions">
-        {LANGUAGES.map(lang => <button key={lang.code} className={`lang-switch${getLang() === lang.code ? ' active' : ''}`} onClick={() => setLang(lang.code)}>{lang.label}</button>)}
-        {isAdmin(user) && <button className="ghost" onClick={() => setScreen('admin')}>{t('หน้าร้าน')}</button>}
+        <div className="lang-wrap" ref={langRef}>
+          <button className="lang-trigger" onClick={() => setLangOpen(v => !v)}>{LANGUAGES.find(l => l.code === getLang()).label}<span className="lang-arrow">{langOpen ? '▲' : '▼'}</span></button>
+          {langOpen && <div className="lang-menu">{LANGUAGES.filter(l => l.code !== getLang()).map(lang => <button key={lang.code} className="lang-opt" onClick={() => { setLang(lang.code); setLangOpen(false) }}>{lang.label}</button>)}</div>}
+        </div>
+        {isAdmin(user) && <button className="ghost compact" onClick={() => setScreen('admin')}>{t('หน้าร้าน')}</button>}
         <button className="cart-button" onClick={() => setScreen('cart')}>{t('ตะกร้า')} <b>{cartCount}</b></button>
       </div>
     </header>

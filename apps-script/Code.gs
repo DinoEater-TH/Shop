@@ -7,7 +7,7 @@ const TABLES = {
   Settings: ['Key', 'Value'],
   Users: ['ID', 'Phone', 'PIN', 'Name', 'ProfilePic', 'Role', 'Stamps', 'CreatedAt', 'Address', 'Lat', 'Lng'],
   Menu: ['ID', 'Name', 'NameEn', 'NameZh', 'Description', 'DescriptionEn', 'DescriptionZh', 'Price', 'ImageURL', 'Stock', 'StockStatus', 'SoldOutDate', 'IsActive', 'NewAt', 'CategoryID'],
-  Orders: ['OrderID', 'UserID', 'Phone', 'OrderType', 'AddressDetail', 'Lat', 'Lng', 'Distance', 'DeliveryFee', 'PaymentMethod', 'SubTotal', 'Discount', 'Total', 'Status', 'SlipURL', 'EstimatedTime', 'CreatedAt', 'CompletedAt', 'StampEarned', 'StartedAt', 'QueuePosition', 'Options'],
+  Orders: ['OrderID', 'UserID', 'Phone', 'OrderType', 'AddressDetail', 'Lat', 'Lng', 'Distance', 'DeliveryFee', 'PaymentMethod', 'SubTotal', 'Discount', 'Total', 'Status', 'SlipURL', 'EstimatedTime', 'CreatedAt', 'CompletedAt', 'ReceivedAt', 'StampEarned', 'StartedAt', 'QueuePosition', 'Options'],
   OrderItems: ['ID', 'OrderID', 'MenuID', 'Quantity', 'Price'],
   Promotions: ['PromoType', 'Condition', 'DiscountValue', 'FreeMenuID', 'IsActive'],
   Categories: ['CategoryID', 'ParentID', 'Name', 'NameEn', 'NameZh', 'SortOrder', 'IsActive'],
@@ -63,6 +63,7 @@ function dispatch_(request) {
     if (action === 'getOrders') return ok_(getOrders_(request));
     if (action === 'getCustomerOrders') return ok_(getCustomerOrders_(request));
     if (action === 'updateOrderStatus') return ok_(updateStatus_(request));
+    if (action === 'confirmReceived') return ok_(confirmReceived_(request));
     if (action === 'getMenu') return ok_(getMenu_(request));
     if (action === 'saveMenu') return ok_(saveMenu_(request));
     if (action === 'deleteMenu') return ok_(deleteMenu_(request));
@@ -587,6 +588,14 @@ function updateStatus_(request) {
   log_(admin.ID, 'ORDER_STATUS', order.OrderID + ' -> ' + request.status);
   return getOrder_(request);
 }
+function confirmReceived_(request) {
+  const order = find_('Orders', 'OrderID', request.orderId);
+  if (!order) throw new Error('ไม่พบออเดอร์');
+  if (String(order.Status) !== 'Completed') throw new Error('ออเดอร์ยังไม่เสร็จสิ้น');
+  if (order.ReceivedAt) return getOrder_({ orderId: order.OrderID });
+  updateRow_('Orders', 'OrderID', order.OrderID, { ReceivedAt: new Date() });
+  return getOrder_({ orderId: order.OrderID });
+}
 
 /* ---------- menu ---------- */
 function saveMenu_(request) {
@@ -703,8 +712,8 @@ function openDispute_(request) {
   const order = find_('Orders', 'OrderID', request.orderId);
   if (String(order.Status) !== 'Completed') throw new Error('ยังไม่สามารถรายงานปัญหาได้');
   const window_ = number_(settings_().DisputeMinutes);
-  if (order.CompletedAt && window_ > 0) {
-    const elapsed = (new Date().getTime() - new Date(order.CompletedAt).getTime()) / 60000;
+  if (order.ReceivedAt && window_ > 0) {
+    const elapsed = (new Date().getTime() - new Date(order.ReceivedAt).getTime()) / 60000;
     if (elapsed > window_) throw new Error('พ้นเวลารายงานปัญหาแล้ว');
   }
   const existing = rows_('ChatDisputes').filter(function (row) { return String(row.OrderID) === String(order.OrderID); });
@@ -726,7 +735,10 @@ function getChat_(request) {
   const isAdmin = token && sessionUser_(token) && ['Admin', 'SuperAdmin'].indexOf(sessionUser_(token).Role) >= 0;
   if (!isAdmin && phone_(order.Phone) !== phone_(request.customerPhone)) throw new Error('ไม่มีสิทธิ์ในห้องแชทนี้');
   const messages = rows_('ChatDisputes').filter(function (row) { return String(row.OrderID) === String(order.OrderID); });
-  return { orderId: order.OrderID, status: messages.some(function (row) { return String(row.Status) === 'Resolved'; }) ? 'Resolved' : (messages.length ? 'Open' : 'None'), messages: messages };
+  const disputeMinutes = number_(settings_().DisputeMinutes);
+  const receivedAt = order.ReceivedAt ? new Date(order.ReceivedAt).getTime() : 0;
+  const canChat = receivedAt > 0 && (Date.now() - receivedAt) / 60000 <= disputeMinutes;
+  return { orderId: order.OrderID, status: messages.some(function (row) { return String(row.Status) === 'Resolved'; }) ? 'Resolved' : (messages.length ? 'Open' : 'None'), messages: messages, canChat: canChat, receivedAt: order.ReceivedAt };
 }
 function resolveDispute_(request) {
   const admin = requireAdmin_(request.sessionToken);

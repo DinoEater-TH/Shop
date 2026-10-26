@@ -2,9 +2,9 @@ import React, { useEffect, useMemo, useRef, useState } from 'react'
 import QRCode from 'qrcode'
 import { api, baht, beep, compressImage, driveImage, fmtTime, isNewItem, num, orderOptions, promoOf } from '../api'
 import { ChatRoom, Empty, Field, MapPicker, Receipt, StatusBadge } from '../components'
-import { t } from '../i18n'
+import { t, useLang } from '../i18n'
 
-const TABS = [
+const TABS = () => [
   { key: 'orders', label: t('ออเดอร์') },
   { key: 'pos', label: t('สั่งแทนลูกค้า') },
   { key: 'menu', label: t('เมนู') },
@@ -18,18 +18,20 @@ const TABS = [
 ]
 
 export default function AdminScreen({ store, reloadStore, user, requireLogin }) {
+  useLang()
   const [tab, setTab] = useState('pos')
   const token = user?.SessionToken
+  const tabs = TABS()
 
   if (!user || !['Admin', 'SuperAdmin'].includes(user.Role)) return <section className="page">
-    <h1>สำหรับผู้ดูแลร้าน</h1>
-    <p className="hint">กรุณาเข้าสู่ระบบด้วยบัญชีที่มีบทบาท Admin หรือ SuperAdmin</p>
-    <button className="primary" onClick={requireLogin}>ไปหน้าเข้าสู่ระบบ</button>
+    <h1>{t('สำหรับผู้ดูแลร้าน')}</h1>
+    <p className="hint">{t('กรุณาเข้าสู่ระบบด้วยบัญชีที่มีบทบาท Admin หรือ SuperAdmin')}</p>
+    <button className="primary" onClick={requireLogin}>{t('ไปหน้าเข้าสู่ระบบ')}</button>
   </section>
 
   return <section className="page admin">
-    <h1>หน้าร้าน</h1>
-    <div className="tabs">{TABS.map(item => <button key={item.key} className={tab === item.key ? 'active' : ''} onClick={() => setTab(item.key)}>{item.label}</button>)}</div>
+    <h1>{t('หน้าร้าน')}</h1>
+    <div className="tabs">{tabs.map(item => <button key={item.key} className={tab === item.key ? 'active' : ''} onClick={() => setTab(item.key)}>{item.label}</button>)}</div>
     {tab === 'orders' && <AdminOrders token={token} store={store} />}
     {tab === 'pos' && <AdminPos token={token} store={store} />}
     {tab === 'menu' && <AdminMenu token={token} reloadStore={reloadStore} categories={store.categories || []} />}
@@ -432,10 +434,11 @@ function AdminSettings({ store, token, reloadStore }) {
   const logoPreview = draft.StoreLogoBase64 || (draft.StoreLogo ? driveImage(draft.StoreLogo, 400) : '')
 
   return <div>
-    <h2>ตั้งค่าร้าน</h2>
+    <h2>{t('ตั้งค่าร้าน')}</h2>
+    <p className="hint">{t('ชื่อร้านและโลโก้จะแสดงมุมบนซ้ายของแอป')}</p>
     {keys.map(([key, label]) => <Field key={key} label={label}><input value={draft[key] ?? ''} onChange={event => setDraft({ ...draft, [key]: event.target.value })} /></Field>)}
-    <label className="checkline"><input type="checkbox" checked={String(draft.AcceptingOrders).toUpperCase() !== 'FALSE'} onChange={event => setDraft({ ...draft, AcceptingOrders: event.target.checked ? 'TRUE' : 'FALSE' })} /><span>เปิดรับออเดอร์</span></label>
-    <Field label="โลโก้ร้าน" hint="แสดงบนหน้าแรกของลูกค้า · เปลี่ยนได้ตลอดเวลา">
+    <label className="checkline"><input type="checkbox" checked={String(draft.AcceptingOrders).toUpperCase() !== 'FALSE'} onChange={event => setDraft({ ...draft, AcceptingOrders: event.target.checked ? 'TRUE' : 'FALSE' })} /><span>{t('เปิดรับออเดอร์')}</span></label>
+    <Field label={t('โลโก้ร้าน')} hint={t('แสดงมุมบนซ้ายและหน้าแรก · เปลี่ยนได้ตลอดเวลา')}>
       <input type="file" accept="image/*" onChange={event => compressImage(event.target.files[0], 800, 0.85).then(imageBase64 => setDraft({ ...draft, StoreLogoBase64: imageBase64 }))} />
       <button type="button" className="ghost compact" onClick={openDrive}>เลือกจาก Google Drive</button>
       {logoPreview && <button type="button" className="ghost compact" onClick={() => setDraft({ ...draft, StoreLogo: '', StoreLogoBase64: '' })}>ล้างโลโก้</button>}

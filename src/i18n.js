@@ -1,6 +1,8 @@
+import { useState, useEffect } from 'react'
+
 export const LANGUAGES = [
-  { code: 'th', label: 'ไทย' },
-  { code: 'en', label: 'English' },
+  { code: 'th', label: 'TH' },
+  { code: 'en', label: 'EN' },
   { code: 'zh', label: '中文' }
 ]
 
@@ -13,6 +15,12 @@ export function setLang(code) {
   listeners.forEach(fn => fn(code))
 }
 export function subscribeLang(fn) { listeners.add(fn); return () => listeners.delete(fn) }
+
+export function useLang() {
+  const [lang, setLangState] = useState(_lang)
+  useEffect(() => subscribeLang(setLangState), [])
+  return lang
+}
 
 const DICT = {
   'เมนู': { en: 'Menu', zh: '菜单' },
@@ -128,6 +136,45 @@ const DICT = {
   'กำลังดำเนินการจัดส่ง': { en: 'Out for delivery', zh: '配送中' },
   'ออเดอร์เสร็จสิ้น ขอบคุณที่ใช้บริการ': { en: 'Order completed, thank you!', zh: '订单完成，感谢光临' },
   'ออเดอร์ถูกยกเลิก': { en: 'Order cancelled', zh: '订单已取消' },
+  'แสตมป์': { en: 'stamps', zh: '印花' },
+  'ทอดใหม่ทุกออเดอร์': { en: 'Freshly fried for every order', zh: '现点现炸' },
+  'หิวเมื่อไร': { en: 'Whenever you\'re hungry', zh: '饿了的时候' },
+  'ให้ DinoEater ดูแล': { en: 'Let DinoEater take care', zh: '让 DinoEater 照顾你' },
+  'สินค้าขายดี': { en: 'Best sellers', zh: '热卖' },
+  'อันดับขายดีจากออเดอร์จริง': { en: 'Ranked by real order sales', zh: '按真实销量排名' },
+  'ออเดอร์ล่าสุด': { en: 'Latest Orders', zh: '最新订单' },
+  'เสียงเตือน': { en: 'Sound alert', zh: '声音提醒' },
+  'เลือกไฟล์เสียงจากเครื่อง': { en: 'Choose a sound file', zh: '选择提示音文件' },
+  'ใช้เสียงเริ่มต้น': { en: 'Use default sound', zh: '使用默认声音' },
+  'ทดลองเสียง': { en: 'Test sound', zh: '测试声音' },
+  'ยังไม่มีออเดอร์': { en: 'No orders yet', zh: '暂无订单' },
+  'รับออเดอร์': { en: 'Accept order', zh: '接单' },
+  'อาหารพร้อม': { en: 'Ready', zh: '餐已备好' },
+  'เริ่มจัดส่ง': { en: 'Start delivery', zh: '开始配送' },
+  'เสร็จสิ้น': { en: 'Complete', zh: '完成' },
+  'ส่งเสร็จแล้ว': { en: 'Delivered', zh: '已送达' },
+  'โปรไฟล์สมาชิก': { en: 'Member profile', zh: '会员资料' },
+  'ยังไม่มีประวัติการสั่งซื้อ': { en: 'No order history', zh: '暂无购买记录' },
+  'ประวัติการทำงานผู้ดูแล': { en: 'Admin activity log', zh: '管理员操作记录' },
+  'ยังไม่มีบันทึก': { en: 'No logs yet', zh: '暂无记录' },
+  'ดูประวัติการทำงานได้เฉพาะ SuperAdmin': { en: 'Only SuperAdmin can view activity logs', zh: '仅超级管理员可查看操作记录' },
+  'สมาชิกและแสตมป์': { en: 'Members & stamps', zh: '会员与印花' },
+  'ค้นหาด้วยเบอร์โทรหรือชื่อ': { en: 'Search by phone or name', zh: '按电话或姓名搜索' },
+  'บทบาท': { en: 'Role', zh: '角色' },
+  'ตั้งค่าร้าน': { en: 'Store settings', zh: '商店设置' },
+  'เปิดรับออเดอร์': { en: 'Accepting orders', zh: '接受订单' },
+  'จำนวนคงเหลือ': { en: 'Stock quantity', zh: '库存数量' },
+  'รูปอาหาร': { en: 'Food image', zh: '菜品图片' },
+  'เปิดขาย': { en: 'Active', zh: '上架' },
+  'ประวัติการซื้อ': { en: 'Purchase history', zh: '购买历史' },
+  'บันทึกชื่อ': { en: 'Save name', zh: '保存姓名' },
+  'รูปโปรไฟล์': { en: 'Profile photo', zh: '头像' },
+  'นำทาง': { en: 'Directions', zh: '导航' },
+  'ส่ง': { en: 'Send', zh: '发送' },
+  'จัดการ': { en: 'Manage', zh: '管理' },
+  'โลโก้ร้าน': { en: 'Store logo', zh: '店铺标志' },
+  'ชื่อร้านและโลโก้จะแสดงมุมบนซ้ายของแอป': { en: 'Store name and logo appear at the top-left of the app', zh: '店名和标志显示在应用左上角' },
+  'แสดงมุมบนซ้ายและหน้าแรก · เปลี่ยนได้ตลอดเวลา': { en: 'Shown top-left and on the home page · change anytime', zh: '显示在左上角和首页 · 可随时更换' },
 }
 
 export function t(key, vars = {}) {
