@@ -175,7 +175,9 @@ export default function App() {
       <button className="brand" onClick={() => setScreen('menu')}>
         {storeSettings.StoreLogo ? (
           <img className="brand-logo" src={driveImage(storeSettings.StoreLogo, 80)} alt="" />
-        ) : null}
+        ) : (
+          <span className="brand-icon">🍗</span>
+        )}
         {storeSettings.StoreName && storeSettings.StoreName.toLowerCase() !== 'dinoeater' ? (
           <span>{storeSettings.StoreName}</span>
         ) : (

@@ -11,6 +11,7 @@ header{height:72px;display:flex;align-items:center;justify-content:space-between
 .brand{display:flex;align-items:center;gap:9px;border:0;background:none;color:var(--ink);font:700 18px 'Space Grotesk',Kanit,sans-serif;letter-spacing:-.045em;padding:0;white-space:nowrap;overflow:hidden;min-width:0;cursor:pointer}
 .brand .brand-highlight{color:var(--chili)}
 .brand-logo{width:40px;height:40px;border-radius:14px;object-fit:cover;flex-shrink:0;border:2px solid var(--ink);box-shadow:3px 3px 0 var(--gold)}
+.brand-icon{width:40px;height:40px;border-radius:14px;flex-shrink:0;display:grid;place-items:center;font-size:24px;background:var(--line);border:2px solid var(--ink)}
 .brand span{overflow:hidden;text-overflow:ellipsis}
 .cart-button{border:2px solid var(--ink);border-radius:12px;background:var(--ink);color:#fff;padding:8px 10px;font:700 12px Kanit,sans-serif;white-space:nowrap;flex-shrink:0;box-shadow:2px 3px 0 var(--gold)}
 .cart-button b{background:var(--tangerine);border-radius:7px;padding:1px 6px;margin-left:3px}
