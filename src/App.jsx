@@ -70,7 +70,7 @@ export default function App() {
     let alive = true
     async function poll() {
       try {
-        const fresh = await api('getOrder', { orderId: order.OrderID }, true)
+        const fresh = await api('getOrder', { orderId: order.OrderID, sessionToken: user?.SessionToken, phone: order.Phone }, true)
         if (!alive) return
         setOrder(fresh)
         if (previousStatus.current && previousStatus.current !== fresh.Status) {
@@ -128,7 +128,7 @@ export default function App() {
   }
   function handleRegistered(registered) {
     setUser(registered)
-    if (order?.OrderID) api('getOrder', { orderId: order.OrderID }).then(setOrder).catch(() => {})
+    if (order?.OrderID) api('getOrder', { orderId: order.OrderID, sessionToken: registered.SessionToken, phone: order.Phone }).then(setOrder).catch(() => {})
     setNotice(t('ลงทะเบียนสำเร็จ เริ่มสะสมแสตมป์ได้แล้ว'))
   }
   const cartCount = cart.reduce((sum, item) => sum + item.quantity, 0)
@@ -150,7 +150,7 @@ export default function App() {
     localStorage.setItem('dino-welcome', 'done')
     setUser(member)
     setWelcome(false)
-    if (order?.OrderID) api('getOrder', { orderId: order.OrderID }).then(setOrder).catch(() => {})
+    if (order?.OrderID) api('getOrder', { orderId: order.OrderID, sessionToken: member.SessionToken, phone: order.Phone }).then(setOrder).catch(() => {})
     setNotice(t('ยินดีต้อนรับ {name}', { name: member.Name || member.Phone }))
     if (isAdmin(member)) setScreen('admin')
   }

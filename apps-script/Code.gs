@@ -174,6 +174,58 @@ function phone_(value) { const digits = String(value === undefined || value === 
 function number_(value) { const result = Number(value); return isNaN(result) ? 0 : result; }
 function promote_(promos, type) { return promos.filter(function (p) { return String(p.PromoType) === type && String(p.IsActive).toUpperCase() !== 'FALSE'; })[0] || null; }
 
+/* ---------- server-side price helpers ---------- */
+/** คำนวณราคารวมฝั่งเซิร์ฟเวอร์ — ไม่เชื่อ client */
+function verifyOrderPrices_(request, menuById, settings, user) {
+  const distance = number_(request.order.distance), orderType = String(request.order.orderType || 'Pickup');
+  var subtotal = 0;
+  request.items.forEach(function (item) {
+    const menu = menuById[String(item.menuId)];
+    subtotal += number_(menu.Price) * number_(item.quantity);
+  });
+  var deliveryFee = orderType === 'Delivery' ? deliveryFeeFor_(settings, subtotal, distance) : 0;
+  const phone = phone_(request.order.phone);
+  const isFirstOrder = user ? ordersByUser_(user.ID).length === 0 : true;
+  const paymentMethod = request.order.paymentMethod || 'Cash';
+  const redeem = request.order.redeemStamps && user ? user.Stamps : 0;
+  const eligiblePromos = rows_('Promotions').filter(function (row) { return String(row.IsActive).toUpperCase() !== 'FALSE'; });
+  var discount = computeDiscount_(eligiblePromos, subtotal, isFirstOrder, paymentMethod, redeem, user, settings);
+  var total = Math.max(0, subtotal + deliveryFee - discount);
+  return { subtotal: subtotal, deliveryFee: deliveryFee, discount: discount, total: total };
+}
+function deliveryFeeFor_(settings, subtotal, distance) {
+  if (subtotal >= number_(settings.FreeDeliveryMinimum) && number_(settings.FreeDeliveryMinimum) > 0) return 0;
+  const freeKm = number_(settings.FreeDeliveryDistanceKm);
+  const chargeKm = Math.max(0, Math.ceil(number_(distance) - freeKm));
+  return chargeKm * number_(settings.DeliveryFeePerKm);
+}
+function computeDiscount_(promos, subtotal, isFirstOrder, paymentMethod, redeemStamps, user, settings) {
+  var total = 0;
+  const newMemberPromo = promote_(promos, 'NewMember');
+  if (newMemberPromo && isFirstOrder) total += number_(newMemberPromo.DiscountValue);
+  const mobileBankingPromo = promote_(promos, 'MobileBanking');
+  if (mobileBankingPromo && paymentMethod === 'Transfer') total += number_(mobileBankingPromo.DiscountValue);
+  if (redeemStamps > 0) {
+    const reward = promote_(promos, 'StampReward');
+    if (reward && number_(user.Stamps) >= number_(reward.Condition)) total += number_(reward.DiscountValue);
+  }
+  return total;
+}
+
+/* ---------- verify session for public endpoints ---------- */
+/** @return {{ ID, Role }} หรือ null ถ้าไม่มี sessionToken แต่ phone ตรง */
+function verifyCustomer_(token, phone) {
+  if (!token && !phone) throw new Error('กรุณาระบุข้อมูลผู้ใช้');
+  if (token) {
+    const session = sessionUser_(token);
+    if (session) return session;
+  }
+  if (!phone) throw new Error('กรุณาเข้าสู่ระบบก่อน');
+  const match = userByPhone_(phone);
+  if (!match) throw new Error('ไม่พบบัญชี กรุณาลงทะเบียน');
+  return { ID: match.ID, Role: String(match.Role || 'Customer') };
+}
+
 /* ---------- auth ---------- */
 function session_(user) { const token = Utilities.getUuid(); CacheService.getScriptCache().put('session:' + token, JSON.stringify({ ID: user.ID, Role: String(user.Role || 'Customer') }), SESSION_SECONDS); return token; }
 function sessionUser_(token) { if (!token) return null; const value = CacheService.getScriptCache().get('session:' + token); return value ? JSON.parse(value) : null; }
@@ -246,6 +298,8 @@ function updateProfile_(request) {
   const phone = phone_(request.phone);
   const user = rows_('Users').filter(function (row) { return phone_(row.Phone) === phone; })[0];
   if (!user) throw new Error('ไม่พบผู้ใช้');
+  // Auth: require verified user matching this phone
+  verifyCustomer_(request.sessionToken, phone);
   const changes = {};
   if (request.name) changes.Name = request.name;
   if (request.address !== undefined) changes.Address = request.address;
@@ -462,7 +516,22 @@ function ensureCooking_() {
 }
 function getOrder_(request) {
   const order = find_('Orders', 'OrderID', request.orderId);
-  return Object.assign({}, order, { items: rows_('OrderItems').filter(function (row) { return String(row.OrderID) === String(order.OrderID); }), queue: queueInfo_(order) });
+  var full = Object.assign({}, order, { items: rows_('OrderItems').filter(function (row) { return String(row.OrderID) === String(order.OrderID); }), queue: queueInfo_(order) });
+  // Auth: allow owner (phone match + session) or admin
+  const token = request.sessionToken;
+  if (token && sessionUser_(token)) {
+    const session = sessionUser_(token);
+    if (['Admin', 'SuperAdmin'].indexOf(session.Role) >= 0) return full; // admin sees all
+    if (phone_(String(full.Phone)) === phone_(String(sessionUser_(token).Phone))) return full;
+  }
+  if (phone_(request.phone || '') === phone_(String(full.Phone))) return full;
+  // Mask sensitive fields for unauthenticated access
+  delete full.Phone;
+  delete full.AddressDetail;
+  delete full.Lat;
+  delete full.Lng;
+  delete full.SlipURL;
+  return full;
 }
 function getOrders_(request) {
   requireAdmin_(request.sessionToken);
@@ -471,6 +540,7 @@ function getOrders_(request) {
     .map(function (order) { return Object.assign({}, order, { items: items.filter(function (item) { return String(item.OrderID) === String(order.OrderID); }), queue: queueInfo_(order) }); });
 }
 function getCustomerOrders_(request) {
+  const user = verifyCustomer_(request.sessionToken, request.phone);
   const phone = phone_(request.phone);
   if (!/^0\d{8,9}$/.test(phone)) throw new Error('เบอร์โทรศัพท์ไม่ถูกต้อง');
   const items = rows_('OrderItems');
@@ -499,19 +569,32 @@ function createOrder_(request, byAdmin) {
     request.items.forEach(function (item) {
       const menu = menuById[String(item.menuId)];
       if (!menu || String(menu.IsActive).toUpperCase() === 'FALSE' || ['SoldOutDaily', 'SoldOutPermanent', 'Hidden'].indexOf(String(menu.StockStatus)) >= 0) throw new Error('มีรายการอาหารที่ไม่พร้อมจำหน่าย กรุณาเลือกใหม่');
+      // Verify client-supplied price matches menu price
+      const expectedPrice = number_(menu.Price);
+      if (number_(item.price) !== expectedPrice) throw new Error('ราคาเมนู "' + menu.Name + '" ไม่ตรงกับราคาจริง');
     });
-    const id = 'DE' + Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyyMMddHHmmss') + Math.floor(Math.random() * 100);
+    const id = 'DE' + Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyyMMddHHmmss') + Math.floor(Math.random() * 99);
     const phone = phone_(o.phone);
     let userId = o.userId || '';
-    if (!userId && phone) { const match = userByPhone_(phone); if (match) userId = match.ID; }
+    let user = null;
+    if (request.sessionToken) {
+      const session = sessionUser_(request.sessionToken);
+      if (session) {
+        const matched = find_('Users', 'ID', session.ID);
+        if (matched) { userId = matched.ID; user = matched; }
+      }
+    }
+    if (!userId && phone) { const match = userByPhone_(phone); if (match) { userId = match.ID; user = match; } }
+    // SERVER-SIDE price calculation — อย่าเชื่อ client
+    const verified = verifyOrderPrices_({ order: { distance: o.distance, orderType: o.orderType, paymentMethod: o.paymentMethod, redeemStamps: o.redeemStamps }, items: request.items }, menuById, settings, user);
     const redeem = o.redeemStamps && userId ? prepareStampRedemption_(userId, id) : null;
     const slip = o.slipBase64 ? uploadBase64_(o.slipBase64, 'slip-' + id + '.jpg') : '';
     const queuePosition = activeOrders_().length + 1;
     const options = validateOrderOptions_(o.options);
     const order = {
       OrderID: id, UserID: userId, Phone: phone, OrderType: o.orderType, AddressDetail: o.addressDetail || '',
-      Lat: o.lat || '', Lng: o.lng || '', Distance: number_(o.distance), DeliveryFee: number_(o.deliveryFee),
-      PaymentMethod: o.paymentMethod, SubTotal: number_(o.subTotal), Discount: number_(o.discount), Total: number_(o.total),
+      Lat: o.lat || '', Lng: o.lng || '', Distance: number_(o.distance), DeliveryFee: verified.deliveryFee,
+      PaymentMethod: o.paymentMethod, SubTotal: verified.subtotal, Discount: verified.discount, Total: verified.total,
       Status: 'Pending', SlipURL: slip, EstimatedTime: number_(o.estimatedTime) || number_(settings.PrepMinutes), CreatedAt: new Date(), CompletedAt: '', StampEarned: '', StartedAt: '', QueuePosition: queuePosition,
       Options: options.length ? JSON.stringify(options) : ''
     };
@@ -589,6 +672,7 @@ function updateStatus_(request) {
   return getOrder_(request);
 }
 function confirmReceived_(request) {
+  verifyCustomer_(request.sessionToken, request.phone);
   const order = find_('Orders', 'OrderID', request.orderId);
   if (!order) throw new Error('ไม่พบออเดอร์');
   if (String(order.Status) !== 'Completed') throw new Error('ออเดอร์ยังไม่เสร็จสิ้น');

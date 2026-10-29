@@ -100,7 +100,7 @@ function AdminOrders({ token, store }) {
     } catch (updateError) { alert(updateError.message) }
   }
   async function openDetail(order) {
-    try { setDetail(await api('getOrder', { orderId: order.OrderID })) } catch (detailError) { alert(detailError.message) }
+    try { setDetail(await api('getOrder', { orderId: order.OrderID, sessionToken: token })) } catch (detailError) { alert(detailError.message) }
   }
   function openAccept(order) { setAcceptMinutes(num(store?.settings?.PrepMinutes) || num(order.EstimatedTime) || 10); setAcceptOrder(order) }
   async function confirmAccept() { const target = acceptOrder; setAcceptOrder(null); await advance(target, 'Accepted', acceptMinutes) }

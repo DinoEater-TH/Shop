@@ -290,6 +290,7 @@ export function CheckoutScreen({ cart, user, store, onOrderCreated, onStoreChang
     setBusy(true)
     try {
       const order = await api('createOrder', {
+        sessionToken: user?.SessionToken,
         order: {
           userId: user?.ID || '',
           phone: String(form.phone).replace(/\D/g, ''),
@@ -400,7 +401,7 @@ export function ProfileScreen({ user, onUser, onBack, onAuthSuccess, store, onRe
     if (!user) return
     const cached = readCache('orders:' + user.Phone)
     if (cached) setHistory(cached)
-    api('getCustomerOrders', { phone: user.Phone }).then(data => { writeCache('orders:' + user.Phone, data); setHistory(data) }).catch(() => { if (!cached) setHistory([]) })
+    api('getCustomerOrders', { phone: user.Phone, sessionToken: user?.SessionToken }).then(data => { writeCache('orders:' + user.Phone, data); setHistory(data) }).catch(() => { if (!cached) setHistory([]) })
   }, [user?.ID, user?.Phone])
 
   async function login() {
@@ -431,13 +432,13 @@ export function ProfileScreen({ user, onUser, onBack, onAuthSuccess, store, onRe
   async function changePin() {
     setError('')
     if (!/^\d{4,8}$/.test(String(newPin))) return setError('รหัส PIN ใหม่ต้องเป็นตัวเลข 4-8 หลัก')
-    try { await api('updateProfile', { phone: user.Phone, currentPin, newPin }); setCurrentPin(''); setNewPin(''); setError('เปลี่ยนรหัส PIN เรียบร้อย') } catch (pinError) { setError(pinError.message) }
+    try { await api('updateProfile', { sessionToken: user?.SessionToken, phone: user.Phone, currentPin, newPin }); setCurrentPin(''); setNewPin(''); setError('เปลี่ยนรหัส PIN เรียบร้อย') } catch (pinError) { setError(pinError.message) }
   }
   async function saveProfile() {
-    try { const data = await api('updateProfile', { phone: user.Phone, name }); onUser({ ...user, ...data }); setError('บันทึกแล้ว') } catch (profileError) { setError(profileError.message) }
+    try { const data = await api('updateProfile', { sessionToken: user?.SessionToken, phone: user.Phone, name }); onUser({ ...user, ...data }); setError('บันทึกแล้ว') } catch (profileError) { setError(profileError.message) }
   }
   async function savePicture(file) {
-    try { const data = await api('updateProfile', { phone: user.Phone, profilePicBase64: await compressImage(file, 600, 0.8) }); onUser({ ...user, ...data }); setError('อัปเดตรูปแล้ว') } catch (pictureError) { setError(pictureError.message) }
+    try { const data = await api('updateProfile', { sessionToken: user?.SessionToken, phone: user.Phone, profilePicBase64: await compressImage(file, 600, 0.8) }); onUser({ ...user, ...data }); setError('อัปเดตรูปแล้ว') } catch (pictureError) { setError(pictureError.message) }
   }
   function logout() { onUser(null); onBack() }
 
